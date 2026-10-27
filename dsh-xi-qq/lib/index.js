@@ -16,6 +16,8 @@ const VERSION = '0.2.1'
 const POLL_MS = 2000
 const HEARTBEAT_MS = 30000
 const DIGEST_MAX = 6
+// 说话风格注入版本：文案改了就把数字 +1，老会话会重发一次新文案
+const STYLE_VERSION = 2
 const STYLE_NOTE = '（QQ 通道）现在是在 QQ 上聊天，不是在交作业：口语、短句，不用 markdown 和列表。该短就短，该展开就展开，可以贫、可以顶回来、可以只回一个字。别端着，别写成报告。'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -38,7 +40,7 @@ export function apply(ctx, config) {
 
   const bridge = createBridge({ getService, getSettings: () => settings, trace })
   const limiter = createLimiter()
-  const styled = new Set(Object.keys(bridge.known).filter((k) => bridge.known[k]?.styleSent))
+  const styled = new Set(Object.keys(bridge.known).filter((k) => (bridge.known[k]?.styleVersion || 0) >= STYLE_VERSION))
   const recent = new Map() // groupId -> [{name, text, at}]
   const typingOk = { private: true, group: true }
 
@@ -255,7 +257,7 @@ export function apply(ctx, config) {
     if (settings.chat?.styleNote !== false && !styled.has(peer)) {
       content = `${settings.chat?.styleNoteText || STYLE_NOTE}\n\n${content}`
       styled.add(peer)
-      bridge.markStyled?.(peer)
+      bridge.markStyled?.(peer, STYLE_VERSION)
     }
 
     await setTyping(kind, target, true)

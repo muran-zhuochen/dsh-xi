@@ -71,11 +71,13 @@ export function createBridge({ getService, getSettings, trace }) {
     persist()
   }
 
-  /** 记下「这个会话已经说过一次说话风格」，免得每轮都重复。 */
-  function markStyled(peer) {
+  /** 记下「这个会话已经说过哪一版说话风格」，免得每轮都重复。 */
+  function markStyled(peer, version = 1) {
     const rec = sessions[peer]
-    if (!rec || rec.styleSent) return
+    if (!rec) return
+    if (rec.styleSent && rec.styleVersion === version) return
     rec.styleSent = true
+    rec.styleVersion = version
     persist()
   }
 
