@@ -587,8 +587,8 @@ window.__ModuleLoader__.load({
       // 三处都读不到就锁住，避免用空名单覆盖。
       const pick = (key) => {
         if (Array.isArray(pending[key])) return pending[key]
-        if (fileWl && Array.isArray(fileWl[key])) return fileWl[key]
         if (Array.isArray(view[key])) return view[key]
+        if (fileWl && Array.isArray(fileWl[key])) return fileWl[key]
         if (Array.isArray(bridge.settings?.[key])) return bridge.settings[key]
         return null
       }
