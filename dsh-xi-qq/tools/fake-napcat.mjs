@@ -1,15 +1,9 @@
 // 假 NapCat：一个只会说一句、并打印所有 action 的 OneBot 11 WS 服务端。
 // 用来在没有真协议端时验证「收消息 → 进会话 → 回消息」整条链。
-//
 // 用法：node tools/fake-napcat.mjs [port] ["要发的话"]
-// 需要 ws 包：从 DSH profile 的 node_modules 解析（DSH_PROFILE_DIR 或 ~/.dsh/profiles/<name>）。
-import os from 'node:os'
-import path from 'node:path'
 import { createRequire } from 'node:module'
 
-const profileDir = process.env.DSH_PROFILE_DIR
-  || path.join(os.homedir(), '.dsh', 'profiles', process.env.DSH_PROFILE || 'desktop')
-const require = createRequire(path.join(profileDir, 'package.json'))
+const require = createRequire('C:/Users/MRZC/.dsh/profiles/desktop/package.json')
 const { WebSocketServer } = require('ws')
 
 const port = Number(process.argv[2] || 3999)

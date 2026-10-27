@@ -43,6 +43,8 @@ export const QQ_DEFAULTS = {
   },
   limits: { dailyEnabled: true, dailyReplies: 200 },
   chat: { chunkReply: true, maxChunks: 3, typing: true, styleNote: true },
+  approvalPolicy: 'never',
+  unstickOnStart: true,
 }
 
 export function readJson(file, fallback) {

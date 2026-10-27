@@ -79,6 +79,44 @@ export function createBridge({ getService, getSettings, trace }) {
     persist()
   }
 
+  const policySet = new Set()
+
+  /** QQ 会话不该卡在审批上：默认把该 agent 的策略钉成 never（工具直接被拒，不等人）。 */
+  async function ensurePolicy(sessionId) {
+    const approval = getService('approval')
+    if (!approval?.setPolicy || policySet.has(sessionId)) return
+    const wanted = getSettings().approvalPolicy || 'never'
+    try {
+      const resolved = await service().resolveAgent(sessionId)
+      if (resolved?.agent) {
+        approval.setPolicy(resolved.agent, wanted)
+        policySet.add(sessionId)
+        trace(`approval: ${sessionId} -> ${wanted}`)
+      }
+    } catch (err) {
+      trace(`approval set failed ${sessionId}: ${err.message}`)
+    }
+  }
+
+  /** 打断正在跑（或正卡在审批上）的回合，别让后来的消息一直排队。 */
+  async function cancelSession(sessionId) {
+    try {
+      await service().cancel({ sessionId })
+      trace(`cancel: ${sessionId}`)
+    } catch (err) {
+      trace(`cancel failed ${sessionId}: ${err.message}`)
+    }
+  }
+
+  /** 插件刚起来时，把已知会话里可能卡住的回合清掉。 */
+  async function unstickAll() {
+    for (const [peer, rec] of Object.entries(sessions)) {
+      if (!rec?.sessionId) continue
+      trace(`unstick: ${peer}`)
+      await cancelSession(rec.sessionId)
+    }
+  }
+
   /**
    * @returns {Promise<{text: string, kind: string, error?: Error}>}
    */
@@ -86,11 +124,12 @@ export function createBridge({ getService, getSettings, trace }) {
     const sc = service()
     const settings = getSettings()
     const sessionId = await ensureSession(peer)
+    await ensurePolicy(sessionId)
     const baseline = await lastSeq(sc, sessionId)
     trace(`bridge: prompt ${peer} session=${sessionId} base=${baseline} text=${JSON.stringify(text.slice(0, 80))}`)
 
     const controller = new AbortController()
-    const cancel = setTimeout(() => controller.abort(), settings.timeoutMs)
+    const abortTimer = setTimeout(() => controller.abort(), settings.timeoutMs)
     try {
       await sc.prompt({
         requestId: crypto.randomUUID(),
@@ -100,7 +139,7 @@ export function createBridge({ getService, getSettings, trace }) {
         clientTimeZone: tz,
       }, controller.signal)
     } finally {
-      clearTimeout(cancel)
+      clearTimeout(abortTimer)
     }
 
     const deadline = Date.now() + settings.timeoutMs
@@ -124,8 +163,9 @@ export function createBridge({ getService, getSettings, trace }) {
       }
       return { text: reply, kind }
     }
+    // 超时就把这一轮掐掉：否则它会一直挂着，后面的消息全排队等死
+    await cancelSession(sessionId)
     return { text: '', kind: 'timeout', error: new Error(`等回复超时（${Math.round(settings.timeoutMs / 1000)}s）`) }
   }
-
-  return { ask, ensureSession, forget, markStyled, known: sessions }
+  return { ask, ensureSession, forget, markStyled, cancelSession, unstickAll, known: sessions }
 }

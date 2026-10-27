@@ -69,6 +69,11 @@ export const DEFAULTS = {
 
   // 说话方式：分条、正在输入、开头那句风格说明
   chat: { chunkReply: true, maxChunks: 3, typing: true, styleNote: true },
+
+  // QQ 会话的审批策略：never = 不等人，工具直接拒（否则会卡死在审批上）
+  approvalPolicy: 'never',
+  // 插件启动时把已知会话里挂住的回合清掉
+  unstickOnStart: true,
 }
 
 export function ensureDir() {

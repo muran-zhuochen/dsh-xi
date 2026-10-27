@@ -44,6 +44,8 @@ QQ 客户端 ←→ NapCat(OneBot 11) ←→ 本插件 ←→ DSH 会话 ←→ 
 | `groupPolicy.ambient` | `{enabled:false, minIntervalSec:600, maxPerHour:3, chance:0.5, keywords:[...]}` | 没被 @ 时主动接话：关键词/问句命中 → 冷却 → 上限 → 掷骰子，四道闸 |
 | `limits` | `{dailyEnabled:true, dailyReplies:200}` | 全通道每日总条数，过零点重置 |
 | `chat` | `{chunkReply:true, maxChunks:3, typing:true, styleNote:true}` | 分条发、显示正在输入、会话开头那句说话风格 |
+| `approvalPolicy` | `never` | QQ 会话的审批策略。`never` = 工具要审批就直接拒，不等人；设成 `ask` 会卡死在审批上 |
+| `unstickOnStart` | `true` | 插件启动时把已知会话里挂住的回合取消掉 |
 
 **改完不用重启**：插件每 2 秒看一次 `settings.json` 的 mtime，变化就重读配置。
 `~/.dsh/xi-qq/status.json` 是插件写给控制台看的运行态（连接、账号、会话数、今日已回条数），每 30 秒心跳一次，连上/断开时也立刻写。

@@ -261,10 +261,13 @@ export function apply(ctx, config) {
       ? splitText(out, settings.maxReplyChars)
       : splitChat(out, settings.chat?.maxChunks || 3).flatMap((c) => splitText(c, settings.maxReplyChars))
 
+    const sender = bot
+    if (!sender) { trace(`reply dropped ${peer}: 桥已停`); return }
+
     for (let i = 0; i < chunks.length; i += 1) {
       if (i) await sleep(600 + Math.random() * 1000)
       try {
-        await bot.sendText({ kind, target, text: chunks[i] })
+        await sender.sendText({ kind, target, text: chunks[i] })
       } catch (err) {
         trace(`send failed ${peer}: ${err?.message || err}`)
         break
@@ -288,6 +291,11 @@ export function apply(ctx, config) {
   ctx.effect(() => {
     if (settings.enabled !== false) startBot()
     else writeStatus()
+
+    // 上一轮可能卡在审批或超时上没收尾，起来先把已知会话的回合清掉
+    if (settings.unstickOnStart !== false) {
+      setTimeout(() => { void bridge.unstickAll() }, 1200)
+    }
 
     let lastMtime = 0
     try { lastMtime = fs.statSync(SETTINGS_PATH).mtimeMs } catch { /* 还没写过 */ }
