@@ -73,7 +73,7 @@ archive/facts/     退档的事实（不删）
 QQ ←→ NapCat(OneBot 11 :3001) ←→ dsh-xi-qq ←→ DSH 会话 ←→ 汐
 ```
 
-接入页里 QQ 只是一张入口卡片（状态 / 账号 / 会话 / NapCat 是否在跑），点进去是 **NapCat 次级页**：桥状态、启动按钮、两个开关、WebUI 与日志位置都在里面，`← 返回` 退回列表。
+接入页里 QQ 只是一张入口卡片（状态 / 账号 / 会话 / NapCat 是否在跑），点进去是 **NapCat 次级页**：桥状态、启动按钮、开关、白名单、WebUI 与日志位置都在里面，`← 返回` 退回列表。次级页最上面固定一张 NapCat 卡片：一个「打开 NapCat」按钮，下面直接放着 WebUI 登录密码和一键复制；点按钮会把左侧边栏的 `NapCat` 面板切出来（WebUI 整个内嵌，可刷新、可新窗口打开）。
 
 两个开关都写进 `~/.dsh/xi-qq/settings.json`，桥每 2 秒看一次文件 mtime，**改完即时生效，不用重启**：
 
@@ -83,6 +83,15 @@ QQ ←→ NapCat(OneBot 11 :3001) ←→ dsh-xi-qq ←→ DSH 会话 ←→ 汐
 | NapCat 自启动 | `autostartNapCat` | DSH 起来 3 秒后检查，之后每 5 分钟一次，NapCat 没跑就点火 |
 
 自启动点火走 `napcat/app/napcat/launcher.bat`，它自己提权，所以每次冷启动会弹一次 UAC。想免掉这一步，可以建一个登录时运行的计划任务（需要一次管理员授权），再把启动器换成 `schtasks /run`。
+
+### 白名单
+
+次级页的「白名单」管两件事：哪些群、哪些人能触发她。
+
+- 一个号一个胶囊，`×` 移出；下面输入框回车或点「加入」加进来。写的是 `settings.json` 的 `groups` / `allowUsers`，2 秒生效。
+- **默认拒绝**：名单外的群和私聊一律不回，不建会话、不花算力。
+- 名单外的人找过来会记进 `~/.dsh/xi-qq/rejected.json`，界面上显示成虚线圈（`+群号`），点一下加入。
+- 读不到当前名单时编辑器会锁住，避免用空名单覆盖已有配置。
 
 NapCat 装在本机 `~/.dsh/xi-qq/napcat/`，管理面板 `http://127.0.0.1:6099/webui`（token 在 `napcat/app/napcat/config/webui.json`）。
 

@@ -38,7 +38,7 @@ QQ ←→ NapCat(OneBot 11) ←→ dsh-xi-qq ←→ DSH 会话 ←→ 汐
 
 1. 装 NapCat（framework 或 shell 版都行），扫码登录一个 QQ 号。
 2. 在 NapCat 的 WebUI 里开一个 **WebSocket 服务端**，端口 `3001`。
-3. `~/.dsh/xi-qq/settings.json` 里填 `wsUrl`（默认 `ws://127.0.0.1:3001`）和 `groups`（要说话的群号白名单）。
+3. `~/.dsh/xi-qq/settings.json` 里填 `wsUrl`（默认 `ws://127.0.0.1:3001`），再把要说话的群号填进 `groups`、要回的私聊 QQ 号填进 `allowUsers`；也可以装好控制台后在「接入 → QQ → 白名单」里点。
 
 没有协议端也能验：把 `~/.dsh/xi-qq/settings.json` 的 `selftest` 设成 `true`，重启后 `~/.dsh/xi-qq/qq.log` 里会出现一行 `selftest: kind=completed text="通道通了"`。
 
@@ -50,8 +50,8 @@ QQ ←→ NapCat(OneBot 11) ←→ dsh-xi-qq ←→ DSH 会话 ←→ 汐
 {
   "wsUrl": "ws://127.0.0.1:3001",
   "selfId": "",                  // 机器人 QQ 号；留空则用事件里的 self_id
-  "allowUsers": [],              // 允许私聊的 QQ 号；空 = 都回
-  "groups": [],                  // 允许的群号；空 = 群里不回
+  "allowUsers": [],              // 私聊白名单；空 = 谁都不回（默认拒绝）
+  "groups": [],                  // 群白名单；空 = 群里不回
 
   "privateChat": { "enabled": true, "minIntervalSec": 0, "maxPerHour": 0 },
 

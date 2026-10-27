@@ -21,7 +21,9 @@ QQ 客户端 ←→ NapCat(OneBot 11) ←→ 本插件 ←→ DSH 会话 ←→ 
 
 ## 配置
 
-`~/.dsh/xi-qq/settings.json`，改完重启 DSH 生效。缺省值见 `lib/settings.js`。
+`~/.dsh/xi-qq/settings.json`，改完 2 秒内生效。缺省值见 `lib/settings.js`；`dsh-xi` 控制台「接入 → QQ → 白名单」写的就是这里。
+
+**白名单默认拒绝**：`allowUsers` / `groups` 里没有的对端一律不回（不建会话、不花算力），只记进 `rejected.json`，控制台里显示成可一键加入的虚线圈。
 
 | 字段 | 默认 | 说明 |
 | --- | --- | --- |
@@ -29,8 +31,8 @@ QQ 客户端 ←→ NapCat(OneBot 11) ←→ 本插件 ←→ DSH 会话 ←→ 
 | `wsUrl` | `ws://127.0.0.1:3001` | NapCat WebSocket 服务端地址 |
 | `accessToken` | `""` | NapCat 的 token，有就填 |
 | `selfId` | `""` | 机器人 QQ 号，空则用事件里的 `self_id` |
-| `allowUsers` | `[]` | 允许私聊的 QQ 号；空 = 所有私聊都回 |
-| `groups` | `[]` | 允许的群号；空 = 群里一律不回（没在名单里的群，第一条消息会在 `qq.log` 里提示一次） |
+| `allowUsers` | `[]` | 私聊白名单（QQ 号）；空 = 谁都不回 |
+| `groups` | `[]` | 群白名单（群号）；空 = 群里一律不回 |
 | `cwd` | `""` | 会话工作目录；空 = DSH 默认工作区（会带上 `~/.dsh/AGENTS.md` 的人设与记忆规则） |
 | `agentPreset` | `""` | 指定 agent preset，空 = 默认 |
 | `timeoutMs` | `180000` | 一轮最多等多久 |
@@ -82,7 +84,7 @@ selftest: kind=completed text="通道通了"
 按顺序看 `qq.log`：
 
 1. 什么都没有 → 消息没到桥。看 NapCat 是否在线、`wsUrl` 端口对不对。
-2. `group 123456 不在 groups 白名单` → 把群号加进 `settings.json` 的 `groups`（字符串数组），2 秒生效。
+2. `group 123456 不在 groups 白名单` → 控制台「接入 → QQ → 白名单」把群号加进去，或者写 `settings.json` 的 `groups`，2 秒生效。
 3. `@ 限流（cooldown/hourly）` / `插话限流` → 撞上频率限制，等冷却或调大上限。
 4. `插话掷骰子没过` → 概率没中，属正常。
 5. `send failed` → 协议端拒发，常见是账号被禁言或群号错。

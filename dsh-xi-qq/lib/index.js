@@ -6,13 +6,13 @@
 import fs from 'node:fs'
 import { createOneBot } from './onebot.js'
 import { createBridge } from './bridge.js'
-import { loadSettings, log, readJson, SETTINGS_PATH, STATUS_PATH, writeJson } from './settings.js'
+import { loadSettings, log, readJson, REJECTED_PATH, SETTINGS_PATH, STATUS_PATH, writeJson } from './settings.js'
 import { extractText, isAtSelf, toPlain, splitText, splitChat } from './text.js'
 import { createLimiter } from './rate.js'
 
 export const name = 'dsh-xi-qq'
 
-const VERSION = '0.2.1'
+const VERSION = '0.3.0'
 const POLL_MS = 2000
 const HEARTBEAT_MS = 30000
 const DIGEST_MAX = 6
@@ -43,6 +43,30 @@ export function apply(ctx, config) {
   const styled = new Set(Object.keys(bridge.known).filter((k) => (bridge.known[k]?.styleVersion || 0) >= STYLE_VERSION))
   const recent = new Map() // groupId -> [{name, text, at}]
   const typingOk = { private: true, group: true }
+
+  // 白名单外来找过的人/群：只记一笔（不建会话、不回话），控制台里能看到并一键加进来。
+  const rejected = readJson(REJECTED_PATH, {})
+  let rejectedTimer = null
+  const noteRejected = (kind, id, name = '') => {
+    const key = `${kind}:${id}`
+    const prev = rejected[key] || {}
+    rejected[key] = {
+      kind,
+      id: String(id),
+      name: String(name || prev.name || ''),
+      at: Date.now(),
+      firstAt: Number(prev.firstAt) || Date.now(),
+      count: (Number(prev.count) || 0) + 1,
+    }
+    // 只留最近 60 个，别让文件无限长
+    const all = Object.entries(rejected).sort((a, b) => (b[1].at || 0) - (a[1].at || 0))
+    for (const [stale] of all.slice(60)) delete rejected[stale]
+    if (rejectedTimer) return
+    rejectedTimer = setTimeout(() => {
+      rejectedTimer = null
+      writeJson(REJECTED_PATH, rejected)
+    }, 1200)
+  }
 
   const writeStatus = (extra = {}) => {
     if (!selfId) selfId = String(readJson(STATUS_PATH, {}).selfId || '')
@@ -106,7 +130,12 @@ export function apply(ctx, config) {
   }
 
   const claimed = new Set()
-  const unlistedGroups = new Set() // 只提示一次，免得刷屏
+  const warned = new Set() // 同一个对端只提示一次，免得刷屏
+  const warnOnce = (key, line) => {
+    if (warned.has(key)) return
+    warned.add(key)
+    trace(line)
+  }
   const dedupe = (id) => {
     if (id === undefined || id === null) return false
     const key = String(id)
@@ -165,8 +194,10 @@ export function apply(ctx, config) {
 
     if (type === 'private') {
       if (settings.privateChat?.enabled === false) return
-      if (settings.allowUsers.length && !settings.allowUsers.includes(userId)) {
-        trace(`skip private ${userId}：不在 allowUsers`)
+      // 默认拒绝：私聊白名单为空 = 谁都不回，只有名单里的人能进来
+      if (!(settings.allowUsers || []).includes(userId)) {
+        noteRejected('private', userId, name)
+        warnOnce(`private:${userId}`, `skip private ${userId}（${name}）：不在私聊白名单 allowUsers，已忽略`)
         return
       }
       const gate = limiter.allow(`private:${userId}`, settings.privateChat || {})
@@ -179,12 +210,12 @@ export function apply(ctx, config) {
 
     if (type !== 'group') return
     const groupId = String(event.group_id || '')
-    if (!settings.groups.includes(groupId)) {
-      if (!unlistedGroups.has(groupId)) {
-        unlistedGroups.add(groupId)
-        const why = settings.groups.length ? '不在 groups 白名单' : 'groups 白名单是空的'
-        trace(`group ${groupId} ${why}，已忽略；要接就把它加进 settings.json 的 groups`)
-      }
+    const groups = settings.groups || []
+    if (!groups.includes(groupId)) {
+      noteRejected('group', groupId, event.group_name || '')
+      warnOnce(`group:${groupId}`, groups.length
+        ? `group ${groupId} 不在 groups 白名单，已忽略；要接就把它加进来`
+        : `group ${groupId} 被忽略：groups 白名单是空的（空 = 群里一律不回）`)
       return
     }
     if (settings.groupPolicy?.enabled === false) return

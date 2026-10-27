@@ -38,7 +38,7 @@ const MIGRATIONS = [
   },
 ]
 
-export const PLUGIN_VERSION = '0.6.0'
+export const PLUGIN_VERSION = '0.7.0'
 
 export function runMigrations(log = () => {}, dataDir) {
   if (!dataDir) return { version: '0.0.0', migrations: {} }

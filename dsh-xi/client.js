@@ -92,6 +92,40 @@ window.__ModuleLoader__.load({
 .xi-kv{display:flex;flex-wrap:wrap;gap:18px;margin-top:6px}
 .xi-kv div{font-size:12px;color:var(--xi-dim)}
 .xi-kv b{display:block;font-size:15px;font-weight:600;color:inherit;margin-top:2px}
+.xi-primary{border-color:color-mix(in srgb,var(--xi-accent) 55%,transparent);color:var(--xi-accent);font-weight:600}
+.xi-primary:hover{border-color:var(--xi-accent);background:color-mix(in srgb,var(--xi-accent) 8%,transparent)}
+.xi-token{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:10px;
+  border-top:1px solid var(--xi-line)}
+.xi-code{font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12.5px;
+  letter-spacing:.4px;padding:2px 8px;border-radius:6px;border:1px solid var(--xi-line);
+  background:color-mix(in srgb,currentColor 6%,transparent);cursor:text;user-select:all}
+.xi-copied{color:var(--xi-accent);border-color:color-mix(in srgb,var(--xi-accent) 55%,transparent)}
+.xi-napcat{--xi-line:color-mix(in srgb,currentColor 14%,transparent);
+  --xi-muted:color-mix(in srgb,currentColor 58%,transparent);--xi-dim:color-mix(in srgb,currentColor 42%,transparent);
+  --xi-accent:#1f9d8f;height:100%;min-height:0;display:flex;flex-direction:column}
+.xi-napcat-bar{display:flex;align-items:center;gap:8px;flex:0 0 auto;padding:7px 12px;
+  border-bottom:1px solid var(--xi-line);font-size:12px}
+.xi-napcat-title{font-size:13px;font-weight:650;letter-spacing:.3px}
+.xi-napcat-sub{color:var(--xi-dim);font-size:11.5px}
+.xi-napcat-frame{flex:1 1 auto;width:100%;min-height:0;border:0;background:#fff}
+/* 白名单：一个号一个胶囊，× 移出；下面一行输入框加号 */
+.xi-wl-head{display:flex;align-items:baseline;gap:8px;margin-bottom:8px;font-size:12.5px}
+.xi-wl-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.xi-wl-chip{display:inline-flex;align-items:center;border:1px solid var(--xi-line);border-radius:99px;
+  padding:1px 2px 1px 10px;font-size:12px;font-variant-numeric:tabular-nums;color:var(--xi-muted)}
+.xi-wl-x{border:0;background:none;color:var(--xi-dim);cursor:pointer;font:inherit;font-size:14px;
+  line-height:1;padding:3px 7px;border-radius:99px}
+.xi-wl-x:hover{color:var(--xi-rose);background:color-mix(in srgb,var(--xi-rose) 10%,transparent)}
+.xi-wl-add{display:flex;gap:8px}
+.xi-wl-input{flex:1 1 auto;min-width:0;padding:6px 10px;border:1px solid var(--xi-line);border-radius:8px;
+  background:transparent;color:inherit;font:inherit;font-size:12.5px}
+.xi-wl-input:focus{outline:none;border-color:var(--xi-accent)}
+.xi-wl-rej{margin-top:10px;line-height:2}
+.xi-wl-rejbtn{border:1px dashed color-mix(in srgb,currentColor 22%,transparent);background:transparent;
+  color:var(--xi-muted);border-radius:99px;padding:1px 9px;margin:0 6px 4px 0;cursor:pointer;
+  font:inherit;font-size:11.5px;font-variant-numeric:tabular-nums}
+.xi-wl-rejbtn:hover{color:var(--xi-accent);border-color:color-mix(in srgb,var(--xi-accent) 55%,transparent)}
+.xi-wl-sep{margin:14px 0;border-top:1px solid var(--xi-line)}
 `
 
     function ensureStyle() {
@@ -114,6 +148,13 @@ window.__ModuleLoader__.load({
 
     // 两个数据源：先试宿主接口（插件宿主半侧正常时），失败再退到独立控制台（本机 57321）。
     const SOURCES = ['api/dsh-xi/state', 'http://127.0.0.1:57321/api/state']
+
+    // NapCat 协议端：WebUI 与登录密码。密码来自
+    // ~/.dsh/xi-qq/napcat/app/napcat/config/webui.json 的 token。
+    const NAPCAT_URL = 'http://127.0.0.1:6099/webui/'
+    const NAPCAT_TOKEN = '02f19495458f'
+    // apply() 里接上宿主布局服务；QQ 次级页只负责触发。
+    let openNapcatPanel = () => {}
 
     function useData() {
       const [data, setData] = use.useState(null)
@@ -307,6 +348,100 @@ window.__ModuleLoader__.load({
         suffix ? h('span', { className: 'xi-dim' }, suffix) : null)
     }
 
+    const copyText = async (text) => {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text)
+          return
+        }
+      } catch (e) { /* 权限不给就退到 execCommand */ }
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.setAttribute('readonly', '')
+      ta.style.cssText = 'position:fixed;top:0;left:-9999px;opacity:0'
+      document.body.appendChild(ta)
+      ta.select()
+      let ok = false
+      try { ok = document.execCommand('copy') } catch (e) { ok = false }
+      ta.remove()
+      if (!ok) throw new Error('clipboard unavailable')
+    }
+
+    /** QQ 次级页置顶的 NapCat 入口：打开 WebUI + 密码复制。 */
+    function NapcatEntry({ qq }) {
+      const [copied, setCopied] = use.useState(false)
+      const [copyErr, setCopyErr] = use.useState('')
+      const timer = use.useRef(0)
+      use.useEffect(() => () => clearTimeout(timer.current), [])
+      const copy = async () => {
+        try {
+          await copyText(NAPCAT_TOKEN)
+          setCopied(true); setCopyErr('')
+          clearTimeout(timer.current)
+          timer.current = setTimeout(() => setCopied(false), 1600)
+        } catch (e) {
+          setCopied(false)
+          setCopyErr('复制失败，手动选中密码')
+        }
+      }
+      return h('div', {
+        className: 'xi-card',
+        style: { marginBottom: 12, borderColor: 'color-mix(in srgb,var(--xi-accent) 38%,var(--xi-line))' },
+      },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h('h4', { style: { margin: 0 } }, 'napcat · WebUI'),
+          h('span', { className: 'xi-chip', style: { margin: 0, padding: '1px 8px', fontSize: 11 } }, '置顶')),
+        h('div', { className: 'xi-dim', style: { marginTop: 7 } },
+          qq.napcat ? '协议端在跑，WebUI 已就绪。' : '协议端没在跑，先在下面「启动 NapCat」。'),
+        h('div', { className: 'xi-row', style: { marginTop: 10 } },
+          h('button', {
+            className: 'xi-btn xi-primary', type: 'button',
+            onClick: () => openNapcatPanel(),
+          }, '打开 NapCat'),
+          h('span', { className: 'xi-dim' }, '在左侧侧边栏打开')),
+        h('div', { className: 'xi-token' },
+          h('span', { className: 'xi-dim' }, 'WebUI 密码'),
+          h('code', { className: 'xi-code' }, NAPCAT_TOKEN),
+          h('button', {
+            className: 'xi-btn' + (copied ? ' xi-copied' : ''), type: 'button', onClick: copy,
+          }, copied ? '已复制' : '复制'),
+          copyErr ? h('span', { className: 'xi-rose' }, copyErr) : null),
+        h('div', { className: 'xi-dim', style: { marginTop: 7 } }, NAPCAT_URL))
+    }
+
+    /** 左侧边栏的 NapCat 面板：WebUI 整个挂进来。 */
+    function NapcatPanel() {
+      const [nonce, setNonce] = use.useState(0)
+      return h('div', { className: 'xi-napcat' },
+        h('div', { className: 'xi-napcat-bar' },
+          h('span', { className: 'xi-napcat-title' }, 'NapCat'),
+          h('span', { className: 'xi-napcat-sub' }, '127.0.0.1:6099/webui'),
+          h('span', { style: { flex: 1 } }),
+          h('button', {
+            className: 'xi-btn', type: 'button',
+            onClick: () => setNonce((n) => n + 1),
+          }, '刷新'),
+          h('a', {
+            className: 'xi-btn', href: NAPCAT_URL, target: '_blank', rel: 'noreferrer',
+            style: { textDecoration: 'none' },
+          }, '新窗口')),
+        h('iframe', {
+          key: nonce, className: 'xi-napcat-frame', src: NAPCAT_URL, title: 'NapCat WebUI',
+        }))
+    }
+
+    function NapCatIcon(props) {
+      const size = typeof props.size === 'number' ? props.size : 18
+      return h('svg', {
+        width: size, height: size, viewBox: '0 0 24 24', fill: 'none',
+        stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round',
+      },
+        h('path', { d: 'M4.2 10 5.4 4.4l4 2.3h5.2l4-2.3 1.2 5.6v4.7A4.3 4.3 0 0 1 15.5 19h-7A4.3 4.3 0 0 1 4.2 14.7z' }),
+        h('circle', { cx: 9.2, cy: 12, r: .85, fill: 'currentColor', stroke: 'none' }),
+        h('circle', { cx: 14.8, cy: 12, r: .85, fill: 'currentColor', stroke: 'none' }),
+        h('path', { d: 'M9.6 15.3h4.8' }))
+    }
+
     /** 接入页的 QQ 入口：只看状态，点进去才是 NapCat 次级页。 */
     function QqEntry({ qq, onOpen }) {
       const state = qq.connected ? '已连接' : (qq.napcat ? '协议端在跑，桥没连上' : '协议端没在跑')
@@ -317,7 +452,7 @@ window.__ModuleLoader__.load({
         onClick: onOpen,
         onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } },
       },
-        h('h4', null, 'channel · qq · v0.2.1'),
+        h('h4', null, 'channel · qq · v' + (qq.version || '0.3.0')),
         h('div', { style: { fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 } },
           h('i', { className: 'xi-dot ' + dot }), 'QQ',
           h('span', { className: 'xi-dim', style: { fontWeight: 400 } }, state)),
@@ -328,11 +463,94 @@ window.__ModuleLoader__.load({
         h('div', { className: 'xi-dim', style: { marginTop: 10 } }, '进入 NapCat →'))
     }
 
+    /**
+     * 白名单编辑器：一个号一个胶囊，× 移出；下面输入框回车/点「加入」加进来。
+     * 名单外的来客（rejected）做成虚线按钮，点一下直接加入。
+     */
+    function IdList({ title, hint, placeholder, list, rejected, busy, locked, onSave }) {
+      const [draft, setDraft] = use.useState('')
+      const [err, setErr] = use.useState('')
+      const items = Array.isArray(list) ? list : []
+      const off = !!busy || !!locked
+      const pending = (Array.isArray(rejected) ? rejected : []).filter((r) => !items.includes(r.id))
+      const add = (raw) => {
+        const id = String(raw ?? '').replace(/\D/g, '')
+        if (id.length < 4 || id.length > 12) { setErr('要 4~12 位数字'); return }
+        if (items.includes(id)) { setErr('已经在名单里了'); return }
+        setErr('')
+        setDraft('')
+        onSave([...items, id])
+      }
+      return h('div', null,
+        h('div', { className: 'xi-wl-head' },
+          h('b', null, title),
+          h('span', { className: 'xi-dim' }, items.length ? items.length + ' 个' : '空')),
+        h('div', { className: 'xi-wl-chips' },
+          items.length
+            ? items.map((id) => h('span', { className: 'xi-wl-chip', key: id },
+                id,
+                h('button', {
+                  className: 'xi-wl-x', type: 'button', title: '移出白名单',
+                  disabled: off, onClick: () => onSave(items.filter((x) => x !== id)),
+                }, '×')))
+            : h('span', { className: 'xi-dim', style: { fontSize: 12 } }, hint)),
+        h('div', { className: 'xi-wl-add' },
+          h('input', {
+            className: 'xi-wl-input', value: draft, placeholder, inputMode: 'numeric',
+            disabled: off,
+            onInput: (e) => { setDraft(e.target.value); setErr('') },
+            onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); add(draft) } },
+          }),
+          h('button', {
+            className: 'xi-btn', type: 'button', disabled: off,
+            onClick: () => add(draft),
+          }, '加入')),
+        err ? h('div', { className: 'xi-rose', style: { fontSize: 12, marginTop: 6 } }, err) : null,
+        pending.length
+          ? h('div', { className: 'xi-wl-rej' },
+              h('span', { className: 'xi-dim' }, '找过你、但被挡下的：'),
+              pending.map((r) => h('button', {
+                key: r.kind + r.id, className: 'xi-wl-rejbtn', type: 'button', disabled: off,
+                title: (r.name ? r.name + ' · ' : '') + '最近 ' + new Date(r.at).toLocaleString('zh-CN')
+                  + (r.count > 1 ? ' · 共 ' + r.count + ' 条' : '') + ' · 点一下加进白名单',
+                onClick: () => onSave([...items, r.id]),
+              }, '+' + r.id)))
+          : null)
+    }
+
     /** NapCat 次级页：开关、点火、诊断信息都在这里。 */
+    /**
+     * 白名单的真身是 dsh-xi-qq 的 settings.json。控制台宿主没重载时 buildState 里没有这两个列表，
+     * 所以直接问 QQ 插件自己的 /state 兜底：两处都能读到，就永远不会拿空名单去覆盖。
+     */
+    function useBridgeSettings() {
+      const [settings, setSettings] = use.useState(null)
+      const reload = use.useCallback(async () => {
+        try {
+          const r = await fetch('api/dsh-xi-qq/state', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: '{}', cache: 'no-store',
+          })
+          if (!r.ok) return
+          const j = await r.json()
+          if (j && j.settings) setSettings(j.settings)
+        } catch { /* 桥没起来就先空着 */ }
+      }, [])
+      use.useEffect(() => {
+        reload()
+        const t = setInterval(reload, 30000)
+        return () => clearInterval(t)
+      }, [reload])
+      return { settings, reload }
+    }
+
     function QqDetail({ qq, onRefresh, onBack }) {
       const [busy, setBusy] = use.useState('')
       const [err, setErr] = use.useState('')
       const [pending, setPending] = use.useState({})
+      // 写回后宿主返回的 qq 快照（直接读的文件），白名单以它为准；桥的 /state 只做兜底
+      const [fileWl, setFileWl] = use.useState(null)
+      const bridge = useBridgeSettings()
       // 点下去立刻翻，等宿主确认后再交回真实状态
       const view = { ...qq, ...pending }
       const post = async (body, label) => {
@@ -345,7 +563,9 @@ window.__ModuleLoader__.load({
           if (!r.ok) throw new Error('HTTP ' + r.status)
           const j = await r.json()
           if (!j.ok) throw new Error(j.reason || '操作失败')
+          if (j.qq) setFileWl({ groups: j.qq.groups, users: j.qq.allowUsers })
           await onRefresh()
+          await bridge.reload()
           setPending({})
         } catch (e) {
           setErr(e.message || String(e))
@@ -363,6 +583,17 @@ window.__ModuleLoader__.load({
       const am = gp.ambient || {}
       const lim = pol.limits || {}
       const ch = pol.chat || {}
+      // 白名单：优先用刚写回的 qq 快照；宿主新版 buildState 也给；最后问 QQ 插件 /state。
+      // 三处都读不到就锁住，避免用空名单覆盖。
+      const pick = (key) => {
+        if (Array.isArray(pending[key])) return pending[key]
+        if (fileWl && Array.isArray(fileWl[key])) return fileWl[key]
+        if (Array.isArray(view[key])) return view[key]
+        if (Array.isArray(bridge.settings?.[key])) return bridge.settings[key]
+        return null
+      }
+      const groupsWl = pick('groups')
+      const usersWl = pick('allowUsers')
       // 只改一个字段也走深合并，不用回传整块
       const set = (patch, label) => { void post({ patch }, label) }
       const state = view.connected ? '已连接' : (view.napcat ? '协议端在跑，桥没连上' : '协议端没在跑')
@@ -371,8 +602,9 @@ window.__ModuleLoader__.load({
         h('div', { className: 'xi-row', style: { marginTop: 0, marginBottom: 10 } },
           h('button', { className: 'xi-btn', onClick: onBack }, '← 返回'),
           h('span', { className: 'xi-dim' }, '通道 / QQ / NapCat')),
+        h(NapcatEntry, { qq: view }),
         h('div', { className: 'xi-card', style: { marginBottom: 12 } },
-          h('h4', null, 'channel · qq · v0.2.1'),
+          h('h4', null, 'channel · qq · v' + (view.version || '0.3.0')),
           h('div', { style: { fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 } },
             h('i', { className: 'xi-dot ' + dot }), 'QQ',
             h('span', { className: 'xi-dim', style: { fontWeight: 400 } }, state)),
@@ -403,6 +635,32 @@ window.__ModuleLoader__.load({
             hint: 'DSH 起来时 NapCat 没在跑就拉起来，掉了五分钟内补一次',
           }),
           err ? h('div', { className: 'xi-rose', style: { marginTop: 10 } }, err) : null),
+
+        h('div', { className: 'xi-sect' }, '白名单'),
+        h('div', { className: 'xi-card', style: { marginBottom: 12 } },
+          (groupsWl === null || usersWl === null)
+            ? h('div', { className: 'xi-rose', style: { fontSize: 12, marginBottom: 10 } },
+                '读不到当前白名单（QQ 插件没连上）。先别改，免得把已有名单覆盖成空。')
+            : null,
+          h(IdList, {
+            title: '群', hint: '还没有群 · 群里一律不回',
+            placeholder: '群号，例如 1132390404',
+            list: groupsWl || [], busy, locked: groupsWl === null,
+            rejected: (view.rejected || []).filter((r) => r.kind === 'group'),
+            onSave: (next) => set({ groups: next }, 'wl-group'),
+          }),
+          h('div', { className: 'xi-wl-sep' }),
+          h(IdList, {
+            title: '私聊', hint: '还没有人 · 私聊一律不回',
+            placeholder: 'QQ 号，例如 1878017644',
+            list: usersWl || [], busy, locked: usersWl === null,
+            rejected: (view.rejected || []).filter((r) => r.kind === 'private'),
+            onSave: (next) => set({ allowUsers: next }, 'wl-user'),
+          }),
+          h('div', { className: 'xi-dim', style: { marginTop: 10 } },
+            '只有名单里的群和私聊会回话。名单外的只记一笔，不建会话、不花算力；'
+            + '真有人来找，会出现在上面的虚线圈里，点一下就能加进来。')),
+
         h('div', { className: 'xi-sect' }, '私聊'),
         h('div', { className: 'xi-card', style: { marginBottom: 12 } },
           h(Toggle, {
@@ -427,8 +685,9 @@ window.__ModuleLoader__.load({
             title: '启用群聊', hint: '总开关；群号还要在 groups 白名单里',
           }),
           h('div', { className: 'xi-dim', style: { marginTop: 6 } },
-            '白名单：' + ((view.groups || []).length ? view.groups.join('、') : '空（群里一律不回）')
-            + ' · 在 ~/.dsh/xi-qq/settings.json 的 groups 里改'),
+            (groupsWl || []).length
+              ? '名单里的 ' + groupsWl.length + ' 个群会回话；白名单在上面改'
+              : '白名单是空的，群里一律不回；在上面加群号'),
           h('div', { style: { marginTop: 12, borderTop: '1px solid var(--xi-line)', paddingTop: 2 } },
             h(Toggle, {
               on: mn.enabled !== false, disabled: busy !== '',
@@ -510,7 +769,7 @@ window.__ModuleLoader__.load({
             onWord: '（已开）', offWord: '（已关）',
           })),
         h('div', { className: 'xi-note' },
-          '群号白名单（groups）和私聊白名单（allowUsers）还在 ~/.dsh/xi-qq/settings.json 里改，没做成输入框——列表类的东西用输入框一填就错。'),
+          '白名单改的就是 ~/.dsh/xi-qq/settings.json 里的 groups / allowUsers；桥每两秒看一次文件，改完即时生效，不用重启。'),
         h('div', { className: 'xi-sect' }, '位置'),
         h('div', { className: 'xi-card' },
           h('div', { className: 'xi-kv', style: { marginTop: 0 } },
@@ -644,6 +903,14 @@ window.__ModuleLoader__.load({
 
     function apply(ctx) {
       ensureStyle()
+      openNapcatPanel = () => ctx.layout.selectPanel('napcat')
+      // NapCat 面板：左侧边栏入口 + WebUI 主面板；QQ 次级页的按钮也跳到这里。
+      ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
+        name: 'sidebar.panellist', id: 'napcat', order: 24, label: () => 'NapCat',
+      }, (props) => h(NapCatIcon, props)))
+      ctx.slots.inject('main', () => ctx.slots.register({
+        name: 'main', key: 'napcat',
+      }, () => h(NapcatPanel)))
       // 左侧边栏入口 → 打开 main 面板（汐的主页）
       ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
         name: 'sidebar.panellist', id: 'xi', order: 25, label: () => '汐',
@@ -657,6 +924,6 @@ window.__ModuleLoader__.load({
       }, () => h(View)))
     }
 
-    return { name: 'dsh-xi', inject: ['slots'], apply }
+    return { name: 'dsh-xi', inject: ['slots', 'layout'], apply }
   },
 })

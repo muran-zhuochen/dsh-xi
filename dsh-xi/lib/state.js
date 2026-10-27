@@ -3,7 +3,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { hasPersona } from './persona.js'
 import { PLUGIN_VERSION } from './upgrade.js'
-import { readQqSettings, QQ_STATUS } from './qqconfig.js'
+import { readQqSettings, QQ_STATUS, QQ_REJECTED } from './qqconfig.js'
 
 const HOME = process.env.USERPROFILE || os.homedir()
 export const DSH_HOME = process.env.DSH_HOME || path.join(HOME, '.dsh')
@@ -116,6 +116,26 @@ function parseExtensions(root) {
   return out
 }
 
+/** 白名单外来找过的人/群（dsh-xi-qq 写的 rejected.json），给界面做「一键加进来」。 */
+function parseRejected() {
+  const raw = read(QQ_REJECTED)
+  if (!raw) return []
+  try {
+    const obj = JSON.parse(raw) || {}
+    return Object.values(obj)
+      .filter((x) => x && (x.kind === 'private' || x.kind === 'group') && x.id)
+      .sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0))
+      .slice(0, 12)
+      .map((x) => ({
+        kind: x.kind,
+        id: String(x.id),
+        name: String(x.name || ''),
+        at: Number(x.at) || 0,
+        count: Number(x.count) || 1,
+      }))
+  } catch { return [] }
+}
+
 /** 通道运行态：来自 dsh-xi-qq 写的 status.json 与共享的 settings.json。 */
 function parseChannels() {
   const settings = readQqSettings()
@@ -129,9 +149,14 @@ function parseChannels() {
       connected: !!status.connected,
       napcat: !!status.napcatUp,
       selfId: status.selfId || settings.selfId || '',
+      version: status.version || '',
       peers: Number(status.peers) || 0,
       at: status.at || '',
       daily: status.daily || null,
+      // 白名单：只有名单里的群 / 私聊会回话
+      groups: settings.groups || [],
+      allowUsers: settings.allowUsers || [],
+      rejected: parseRejected(),
       policy: {
         privateChat: settings.privateChat,
         groupPolicy: settings.groupPolicy,

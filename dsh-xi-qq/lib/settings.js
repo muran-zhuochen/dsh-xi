@@ -9,6 +9,8 @@ export const SETTINGS_PATH = path.join(DATA_DIR, 'settings.json')
 export const LOG_PATH = path.join(DATA_DIR, 'qq.log')
 export const SESSIONS_PATH = path.join(DATA_DIR, 'sessions.json')
 export const STATUS_PATH = path.join(DATA_DIR, 'status.json')
+// 白名单外来找过的人/群：只记一笔，不建会话、不回话
+export const REJECTED_PATH = path.join(DATA_DIR, 'rejected.json')
 
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 
@@ -29,9 +31,9 @@ export const DEFAULTS = {
   accessToken: '',
   // 机器人自己的 QQ 号；留空则用 OneBot 事件里的 self_id
   selfId: '',
-  // 允许私聊的 QQ 号；空数组 = 所有私聊都回
+  // 私聊白名单：只有名单里的 QQ 号会回；空数组 = 谁都不回（默认拒绝）
   allowUsers: [],
-  // 允许的群号；空数组 = 群里一律不回
+  // 群白名单：只有名单里的群会回；空数组 = 群里一律不回
   groups: [],
   // 会话工作目录；留空 = DSH 默认工作区
   cwd: '',

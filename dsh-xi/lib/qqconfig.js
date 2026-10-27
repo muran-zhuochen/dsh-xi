@@ -8,6 +8,7 @@ export const DSH_HOME = process.env.DSH_HOME || path.join(HOME, '.dsh')
 export const QQ_DIR = path.join(DSH_HOME, 'xi-qq')
 export const QQ_SETTINGS = path.join(QQ_DIR, 'settings.json')
 export const QQ_STATUS = path.join(QQ_DIR, 'status.json')
+export const QQ_REJECTED = path.join(QQ_DIR, 'rejected.json')
 
 const isPlain = (v) => v !== null && typeof v === 'object' && !Array.isArray(v)
 

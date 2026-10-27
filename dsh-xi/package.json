@@ -1,6 +1,6 @@
 {
   "name": "dsh-xi",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "description": "汐 · 控制台：记忆、心情、成本、QQ 通道与聊天频率，以及形象/语音/B站的预留接口",
   "license": "MIT",
   "type": "module",
