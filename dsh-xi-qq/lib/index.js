@@ -12,11 +12,11 @@ import { createLimiter } from './rate.js'
 
 export const name = 'dsh-xi-qq'
 
-const VERSION = '0.2.0'
+const VERSION = '0.2.1'
 const POLL_MS = 2000
 const HEARTBEAT_MS = 30000
 const DIGEST_MAX = 6
-const STYLE_NOTE = '（QQ 通道说明）以后在这个会话里按聊天的方式说话：短句、口语，不用 markdown 和列表，一般一两句说完。能贫、能反对、能拐弯，别写成报告。'
+const STYLE_NOTE = '（QQ 通道）现在是在 QQ 上聊天，不是在交作业：口语、短句，不用 markdown 和列表。该短就短，该展开就展开，可以贫、可以顶回来、可以只回一个字。别端着，别写成报告。'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -91,7 +91,7 @@ export function apply(ctx, config) {
     if (next.enabled === false) stopBot()
     else if (!bot || urlChanged) { stopBot(); startBot() }
     writeStatus()
-    trace(`settings: enabled=${next.enabled} private=${next.privateChat?.enabled} groups=${next.groupPolicy?.enabled}`)
+    trace(`settings: enabled=${next.enabled} private=${next.privateChat?.enabled} groups=${next.groupPolicy?.enabled} list=[${(next.groups || []).join(',')}]`)
   }
 
   // 每个对端串行：一条没答完不会被下一条插队
@@ -104,6 +104,7 @@ export function apply(ctx, config) {
   }
 
   const claimed = new Set()
+  const unlistedGroups = new Set() // 只提示一次，免得刷屏
   const dedupe = (id) => {
     if (id === undefined || id === null) return false
     const key = String(id)
@@ -176,13 +177,22 @@ export function apply(ctx, config) {
 
     if (type !== 'group') return
     const groupId = String(event.group_id || '')
-    if (!settings.groups.includes(groupId)) return
+    if (!settings.groups.includes(groupId)) {
+      if (!unlistedGroups.has(groupId)) {
+        unlistedGroups.add(groupId)
+        const why = settings.groups.length ? '不在 groups 白名单' : 'groups 白名单是空的'
+        trace(`group ${groupId} ${why}，已忽略；要接就把它加进 settings.json 的 groups`)
+      }
+      return
+    }
     if (settings.groupPolicy?.enabled === false) return
 
     const mentioned = isAtSelf(event.message, selfId)
     const clean = selfId ? text.replaceAll(`@${selfId}`, '').trim() : text
-    if (!clean) return
-    pushRecent(groupId, name, clean)
+    const bare = mentioned && !clean
+    if (!clean && !mentioned) return
+    const body = bare ? '（只 @ 了我，没有正文）' : clean
+    pushRecent(groupId, name, bare ? '@ 了你' : clean)
 
     const policy = settings.groupPolicy || {}
     const peer = `group:${groupId}`
@@ -193,8 +203,11 @@ export function apply(ctx, config) {
       const gate = limiter.allow(`group:${groupId}:mention`, mention)
       if (!gate.ok) { trace(`group ${groupId} @ 限流（${gate.reason}）`); return }
       enqueue(peer, () => reply({
-        kind: 'group', target: groupId, peer, userId, name, text: clean,
-        preface: digestFor(groupId), prompt: `${name}：${clean}`,
+        kind: 'group', target: groupId, peer, userId, name, text: body,
+        preface: digestFor(groupId),
+        prompt: bare
+          ? `${name} 只 @ 了你，没写正文。用一句自然的反应回他，别长篇。`
+          : `${name}：${clean}`,
       }))
       return
     }
@@ -202,10 +215,17 @@ export function apply(ctx, config) {
     // 没被 @：主动插话，四道闸
     const ambient = policy.ambient || {}
     if (!ambient.enabled) return
+    const trigger = String(ambient.trigger || 'keywords')
     const keys = (ambient.keywords || []).filter(Boolean)
-    const hitKeyword = keys.some((k) => clean.includes(k))
-    const hitQuestion = /[?？]/.test(clean) || /吗|呢|怎么|为什么|谁|哪个/.test(clean)
-    if (!hitKeyword && !hitQuestion) return
+    const plain = clean.replace(/\[[^\]]*\]/g, '').replace(/@\S+/g, '').trim()
+    if (trigger === 'any') {
+      // 「任何话都可能接」也要有个下限：纯表情 / 单个字不凑热闹
+      if (plain.length < 2) return
+    } else {
+      const hitKeyword = keys.some((k) => clean.includes(k))
+      const hitQuestion = /[?？]/.test(clean) || /吗|呢|怎么|为什么|谁|哪个/.test(clean)
+      if (!hitKeyword && !hitQuestion) return
+    }
     const gate = limiter.allow(`group:${groupId}:ambient`, ambient)
     if (!gate.ok) { trace(`group ${groupId} 插话限流（${gate.reason}）`); return }
     const chance = Number(ambient.chance)
@@ -233,7 +253,7 @@ export function apply(ctx, config) {
     let content = prompt || text
     if (preface) content = `${preface}\n\n${content}`
     if (settings.chat?.styleNote !== false && !styled.has(peer)) {
-      content = `${STYLE_NOTE}\n\n${content}`
+      content = `${settings.chat?.styleNoteText || STYLE_NOTE}\n\n${content}`
       styled.add(peer)
       bridge.markStyled?.(peer)
     }

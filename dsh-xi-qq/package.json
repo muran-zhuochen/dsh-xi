@@ -1,6 +1,6 @@
 {
   "name": "dsh-xi-qq",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "汐 · QQ 接入：把 QQ 私聊/群聊接到 DSH 会话上的 OneBot 11 桥",
   "type": "module",

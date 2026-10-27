@@ -317,7 +317,7 @@ window.__ModuleLoader__.load({
         onClick: onOpen,
         onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } },
       },
-        h('h4', null, 'channel · qq · v0.2.0'),
+        h('h4', null, 'channel · qq · v0.2.1'),
         h('div', { style: { fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 } },
           h('i', { className: 'xi-dot ' + dot }), 'QQ',
           h('span', { className: 'xi-dim', style: { fontWeight: 400 } }, state)),
@@ -372,7 +372,7 @@ window.__ModuleLoader__.load({
           h('button', { className: 'xi-btn', onClick: onBack }, '← 返回'),
           h('span', { className: 'xi-dim' }, '通道 / QQ / NapCat')),
         h('div', { className: 'xi-card', style: { marginBottom: 12 } },
-          h('h4', null, 'channel · qq · v0.2.0'),
+          h('h4', null, 'channel · qq · v0.2.1'),
           h('div', { style: { fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 } },
             h('i', { className: 'xi-dot ' + dot }), 'QQ',
             h('span', { className: 'xi-dim', style: { fontWeight: 400 } }, state)),
@@ -426,6 +426,9 @@ window.__ModuleLoader__.load({
             onChange: (v) => set({ groupPolicy: { enabled: v } }, 'gp'),
             title: '启用群聊', hint: '总开关；群号还要在 groups 白名单里',
           }),
+          h('div', { className: 'xi-dim', style: { marginTop: 6 } },
+            '白名单：' + ((view.groups || []).length ? view.groups.join('、') : '空（群里一律不回）')
+            + ' · 在 ~/.dsh/xi-qq/settings.json 的 groups 里改'),
           h('div', { style: { marginTop: 12, borderTop: '1px solid var(--xi-line)', paddingTop: 2 } },
             h(Toggle, {
               on: mn.enabled !== false, disabled: busy !== '',
@@ -444,8 +447,14 @@ window.__ModuleLoader__.load({
             h(Toggle, {
               on: !!am.enabled, disabled: busy !== '',
               onChange: (v) => set({ groupPolicy: { ambient: { enabled: v } } }, 'am'),
-              title: '没被 @ 也偶尔接话', hint: '命中关键词或问句、过冷却、掷骰子通过才回',
+              title: '没被 @ 也偶尔接话', hint: '过冷却、掷骰子通过才回',
               onWord: '（已开）', offWord: '（已关）',
+            }),
+            h(Toggle, {
+              on: am.trigger === 'any', disabled: busy !== '',
+              onChange: (v) => set({ groupPolicy: { ambient: { trigger: v ? 'any' : 'keywords' } } }, 'am'),
+              title: '不只看关键词', hint: '开：群里任何一句都可能接；关：只接关键词或问句',
+              onWord: '（任何话）', offWord: '（关键词/问句）',
             }),
             h(NumField, {
               label: '每小时上限', value: am.maxPerHour ?? 0, suffix: '条',

@@ -28,7 +28,6 @@ export const QQ_DEFAULTS = {
   selfId: '',
   allowUsers: [],
   groups: [],
-  groupRequireAt: true,
   cwd: '',
   agentPreset: '',
   timeoutMs: 180000,
@@ -39,10 +38,17 @@ export const QQ_DEFAULTS = {
   groupPolicy: {
     enabled: true,
     mention: { enabled: true, minIntervalSec: 15, maxPerHour: 30 },
-    ambient: { enabled: false, minIntervalSec: 600, maxPerHour: 3, chance: 0.5, keywords: ['汐', '她', '阿晚'] },
+    ambient: {
+      enabled: false,
+      trigger: 'keywords',
+      minIntervalSec: 600,
+      maxPerHour: 3,
+      chance: 0.5,
+      keywords: ['汐', '她', '阿晚'],
+    },
   },
   limits: { dailyEnabled: true, dailyReplies: 200 },
-  chat: { chunkReply: true, maxChunks: 3, typing: true, styleNote: true },
+  chat: { chunkReply: true, maxChunks: 3, typing: true, styleNote: true, styleNoteText: '' },
   approvalPolicy: 'never',
   unstickOnStart: true,
 }

@@ -33,8 +33,6 @@ export const DEFAULTS = {
   allowUsers: [],
   // 允许的群号；空数组 = 群里一律不回
   groups: [],
-  // 群里是否必须 @ 才回（群策略总开关关闭时不看这个）
-  groupRequireAt: true,
   // 会话工作目录；留空 = DSH 默认工作区
   cwd: '',
   // 指定 agent preset；留空 = 默认
@@ -57,6 +55,8 @@ export const DEFAULTS = {
     mention: { enabled: true, minIntervalSec: 15, maxPerHour: 30 },
     ambient: {
       enabled: false,
+      // keywords = 只接关键词/问句；any = 群里任何一句都掷骰子（仍受冷却、上限、概率约束）
+      trigger: 'keywords',
       minIntervalSec: 600,
       maxPerHour: 3,
       chance: 0.5,
@@ -67,8 +67,8 @@ export const DEFAULTS = {
   // 全通道硬上限：每天最多回多少条，过零点重置
   limits: { dailyEnabled: true, dailyReplies: 200 },
 
-  // 说话方式：分条、正在输入、开头那句风格说明
-  chat: { chunkReply: true, maxChunks: 3, typing: true, styleNote: true },
+  // 说话方式：分条、正在输入、开头那句风格说明（styleNoteText 留空用内置文案）
+  chat: { chunkReply: true, maxChunks: 3, typing: true, styleNote: true, styleNoteText: '' },
 
   // QQ 会话的审批策略：never = 不等人，工具直接拒（否则会卡死在审批上）
   approvalPolicy: 'never',

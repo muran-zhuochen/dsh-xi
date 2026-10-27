@@ -30,8 +30,7 @@ QQ 客户端 ←→ NapCat(OneBot 11) ←→ 本插件 ←→ DSH 会话 ←→ 
 | `accessToken` | `""` | NapCat 的 token，有就填 |
 | `selfId` | `""` | 机器人 QQ 号，空则用事件里的 `self_id` |
 | `allowUsers` | `[]` | 允许私聊的 QQ 号；空 = 所有私聊都回 |
-| `groups` | `[]` | 允许的群号；空 = 群里一律不回 |
-| `groupRequireAt` | `true` | 群里必须 @ 才回 |
+| `groups` | `[]` | 允许的群号；空 = 群里一律不回（没在名单里的群，第一条消息会在 `qq.log` 里提示一次） |
 | `cwd` | `""` | 会话工作目录；空 = DSH 默认工作区（会带上 `~/.dsh/AGENTS.md` 的人设与记忆规则） |
 | `agentPreset` | `""` | 指定 agent preset，空 = 默认 |
 | `timeoutMs` | `180000` | 一轮最多等多久 |
@@ -41,9 +40,9 @@ QQ 客户端 ←→ NapCat(OneBot 11) ←→ 本插件 ←→ DSH 会话 ←→ 
 | `privateChat` | `{enabled:true, minIntervalSec:0, maxPerHour:0}` | 私聊开关与频率，0 = 不限 |
 | `groupPolicy.enabled` | `true` | 群聊总开关（群号还要在 `groups` 白名单里） |
 | `groupPolicy.mention` | `{enabled:true, minIntervalSec:15, maxPerHour:30}` | 被 @ 时回复的频率 |
-| `groupPolicy.ambient` | `{enabled:false, minIntervalSec:600, maxPerHour:3, chance:0.5, keywords:[...]}` | 没被 @ 时主动接话：关键词/问句命中 → 冷却 → 上限 → 掷骰子，四道闸 |
+| `groupPolicy.ambient` | `{enabled:false, trigger:'keywords', minIntervalSec:600, maxPerHour:3, chance:0.5, keywords:[...]}` | 没被 @ 时主动接话：触发 → 冷却 → 上限 → 掷骰子，四道闸。`trigger:'any'` = 群里任何一句都算触发（纯表情/单字除外），`'keywords'` = 只认关键词或问句 |
 | `limits` | `{dailyEnabled:true, dailyReplies:200}` | 全通道每日总条数，过零点重置 |
-| `chat` | `{chunkReply:true, maxChunks:3, typing:true, styleNote:true}` | 分条发、显示正在输入、会话开头那句说话风格 |
+| `chat` | `{chunkReply:true, maxChunks:3, typing:true, styleNote:true, styleNoteText:''}` | 分条发、显示正在输入、会话开头那句说话风格（`styleNoteText` 留空用内置文案） |
 | `approvalPolicy` | `never` | QQ 会话的审批策略。`never` = 工具要审批就直接拒，不等人；设成 `ask` 会卡死在审批上 |
 | `unstickOnStart` | `true` | 插件启动时把已知会话里挂住的回合取消掉 |
 
@@ -77,6 +76,16 @@ selftest: kind=completed text="通道通了"
 ```
 
 有了这一行，说明「会话创建 → prompt → 等 turn/end → 取回复」整条链是通的，剩下只差 QQ 协议端。
+
+## 群里没反应怎么查
+
+按顺序看 `qq.log`：
+
+1. 什么都没有 → 消息没到桥。看 NapCat 是否在线、`wsUrl` 端口对不对。
+2. `group 123456 不在 groups 白名单` → 把群号加进 `settings.json` 的 `groups`（字符串数组），2 秒生效。
+3. `@ 限流（cooldown/hourly）` / `插话限流` → 撞上频率限制，等冷却或调大上限。
+4. `插话掷骰子没过` → 概率没中，属正常。
+5. `send failed` → 协议端拒发，常见是账号被禁言或群号错。
 
 ## 限制
 
