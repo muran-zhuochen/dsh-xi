@@ -11,15 +11,19 @@ import { extractText, isAtSelf, toPlain, splitText, splitChat } from './text.js'
 import { createLimiter } from './rate.js'
 import { createTranscript } from './transcript.js'
 import { createScenes } from './scene.js'
+import { createQqTools } from './tools.js'
 
 export const name = 'dsh-xi-qq'
 
-const VERSION = '0.4.0'
+const VERSION = '0.5.0'
 const POLL_MS = 2000
 const HEARTBEAT_MS = 30000
 // 说话风格注入版本：文案改了就把数字 +1，老会话会重发一次新文案
 const STYLE_VERSION = 2
 const STYLE_NOTE = '（QQ 通道）现在是在 QQ 上聊天，不是在交作业：口语、短句，不用 markdown 和列表。该短就短，该展开就展开，可以贫、可以顶回来、可以只回一个字。别端着，别写成报告。'
+
+// 工具模式说明：只在挂上工具面的会话里发一次，告诉模型「说话要调工具」
+const TOOL_NOTE = '（QQ 通道·工具模式）你的文字输出不会发到 QQ。要说话就调 qq_send_message（想连发几条用 qq_send_burst）；想等对方说完再回就调 qq_wait_for_messages；这段聊到自然结束了调 qq_close_conversation 记一句「收在哪、下次怎么接」。不想说话就什么工具都别调——一个字也不会发出去，这不是失礼。'
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
@@ -43,6 +47,16 @@ export function apply(ctx, config) {
   const scenes = createScenes({ trace, getSettings: () => settings, transcript })
   const bridge = createBridge({ getService, getSettings: () => settings, trace, scenes })
   const limiter = createLimiter()
+  // 工具面：qq_* 工具只挂在 QQ 会话的 agent 上，别的会话看不见
+  const tools = createQqTools({
+    getSettings: () => settings,
+    getBot: () => bot,
+    limiter,
+    transcript,
+    trace,
+  })
+  // 提示词里的「工具模式」说明，每个对端发一次（重启后重发一次，不占什么）
+  const toolNoted = new Set()
   const styled = new Set(Object.keys(bridge.known).filter((k) => (bridge.known[k]?.styleVersion || 0) >= STYLE_VERSION))
   const typingOk = { private: true, group: true }
 
@@ -191,6 +205,8 @@ export function apply(ctx, config) {
       }
       const peer = `private:${userId}`
       transcript.record(peer, { id: event.message_id, name, uid: userId, text })
+      // 她正在用 qq_wait_for_messages 等：这条由工具收下，不再另开一轮（否则会回两次）
+      if (tools.isHolding(peer)) { tools.feed(peer, { from: name, text }); return }
       const gate = limiter.allow(peer, settings.privateChat || {})
       if (!gate.ok) { trace(`private ${userId} 限流（${gate.reason}）`); return }
       enqueue(peer, () => reply({
@@ -220,6 +236,8 @@ export function apply(ctx, config) {
     const peer = `group:${groupId}`
     // 白名单里的每一条都落盘，不管点没点我——她开口的时候才看得见刚才发生了什么
     transcript.record(peer, { id: event.message_id, name, uid: userId, text: bare ? '@ 了你' : clean })
+    // 同上：等待期间的消息归工具，不另开回合
+    if (tools.isHolding(peer)) { tools.feed(peer, { from: name, text: bare ? '@ 了你' : clean }); return }
 
     const policy = settings.groupPolicy || {}
 
@@ -270,7 +288,7 @@ export function apply(ctx, config) {
 
   async function reply({ kind, target, peer, name, text, messageId, prompt = '', skipOnSilence = false }) {
     if (settings.limits?.dailyEnabled !== false) {
-      const day = limiter.dailyAllow(settings.limits?.dailyReplies)
+      const day = limiter.dailyPeek(settings.limits?.dailyReplies)
       if (!day.ok) { trace(`今日总量到顶（${day.used}），跳过 ${peer}`); return }
     }
 
@@ -288,15 +306,33 @@ export function apply(ctx, config) {
       ? ''
       : transcript.digest(peer, { limit: 6, maxChars: 400, title: kind === 'group' ? '群聊' : '私聊' })
 
+    // 工具面：挂在这个会话的 agent 上。挂不上就退回自动转发——不能把话吞了。
+    let toolReady = false
+    if (settings.tools?.enabled !== false && prep?.agent) {
+      try {
+        toolReady = tools.attach(prep.agent, { peer, kind, target })
+      } catch (err) {
+        trace(`tools attach failed ${peer}: ${err?.message || err}`)
+      }
+    }
+
     let content = prompt || text
     if (preface) content = `${preface}\n\n${content}`
+    // 上次收尾记的那句，接在这一轮开头
+    const closing = tools.closingFor(peer)
+    if (closing) content = `${closing}\n\n${content}`
     if (settings.chat?.styleNote !== false && !styled.has(peer)) {
       content = `${settings.chat?.styleNoteText || STYLE_NOTE}\n\n${content}`
       styled.add(peer)
       bridge.markStyled?.(peer, STYLE_VERSION)
     }
+    if (toolReady && !toolNoted.has(peer)) {
+      content = `${TOOL_NOTE}\n\n${content}`
+      toolNoted.add(peer)
+    }
 
     await setTyping(kind, target, true)
+    tools.resetTurn()
     let result
     try {
       result = await bridge.ask(peer, content, prep)
@@ -315,6 +351,21 @@ export function apply(ctx, config) {
       trace(`插话放弃 ${peer}`)
       return
     }
+
+    // 工具模式：话已经在工具里发出去了，文本输出不再转发
+    if (toolReady) {
+      const sends = tools.turnSends()
+      if (sends > 0) { trace(`turn ${peer} 工具发言 ${sends} 条，文本不转发`); return }
+      if (!out) { trace(`turn ${peer} 没调工具也没输出`); return }
+      if (settings.tools?.fallbackOnSilent === false) {
+        // 「说了才算」的严格版：没调工具就是没说。日志里留证据，方便查模型有没有学会。
+        trace(`silent-turn ${peer} 未调工具，按配置不转发：${JSON.stringify(out.slice(0, 60))}`)
+        return
+      }
+      // 兜底版：宁可多发一句，也别让阿晚以为哑了。观察几天再关。
+      trace(`silent-turn ${peer} 未调工具，补发 ${out.length} 字（fallbackOnSilent）`)
+    }
+
     if (!out) out = result.error ? `（没答上来：${result.error.message}）` : '（这一轮没有文字输出）'
     trace(`reply ${peer} kind=${result.kind} len=${out.length}`)
 
@@ -374,6 +425,7 @@ export function apply(ctx, config) {
       clearInterval(poll)
       clearInterval(beat)
       stopBot()
+      try { tools.disposeAll() } catch { /* agent 已经跟着会话一起没了 */ }
     }
   }, 'dsh-xi-qq: bridge')
 

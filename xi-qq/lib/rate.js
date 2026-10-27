@@ -42,10 +42,18 @@ export function createLimiter() {
     return { ok: true, used: day.count }
   }
 
+  /** 只看还剩没剩，不消耗一次。用在「这一轮要不要跑模型」这种预检上。 */
+  function dailyPeek(max, now = Date.now()) {
+    if (day.key !== todayKey(now)) day = { key: todayKey(now), count: 0 }
+    const cap = Number(max) || 0
+    if (cap && day.count >= cap) return { ok: false, reason: 'daily', used: day.count }
+    return { ok: true, used: day.count }
+  }
+
   function dailySnapshot() {
     if (day.key !== todayKey()) day = { key: todayKey(), count: 0 }
     return { date: day.key, count: day.count }
   }
 
-  return { allow, dailyAllow, dailySnapshot }
+  return { allow, dailyAllow, dailyPeek, dailySnapshot }
 }

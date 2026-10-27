@@ -10,7 +10,7 @@ QQ 客户端 ←→ NapCat(OneBot 11) ←→ 本插件 ←→ DSH 会话 ←→ 
 
 - 收 QQ 私聊 / 群里 @ 的消息（OneBot 11 反向 WS）
 - 每个对端（私聊某人 / 某个群）对应一个 DSH 会话，上下文一直在
-- 把会话这轮的文字输出回发到 QQ，自动去 markdown、超长自动分条
+- 发言走工具（`qq_send_message` 等），不是把文字自动转出去——见「工具模式」
 - 同一个对端串行处理，消息不会互相插队
 - 断线自动重连（1s → 2s → 4s → 8s → 16s → 30s 封顶）
 
@@ -46,6 +46,7 @@ QQ 客户端 ←→ NapCat(OneBot 11) ←→ 本插件 ←→ DSH 会话 ←→ 
 | `limits` | `{dailyEnabled:true, dailyReplies:200}` | 全通道每日总条数，过零点重置 |
 | `chat` | `{chunkReply:true, maxChunks:3, typing:true, styleNote:true, styleNoteText:''}` | 分条发、显示正在输入、会话开头那句说话风格（`styleNoteText` 留空用内置文案） |
 | `scene` | `{enabled:true, maxMessages:20, maxChars:800}` | 群聊近况：开口时把最近几条挂进提示词。关掉就退回正文里 6 行摘要 |
+| `tools` | `{enabled:true, fallbackOnSilent:true, minIntervalSec:2, maxPerHour:60}` | 工具模式：发言走 `qq_*` 工具；`enabled:false` 退回「文字自动转发」；`fallbackOnSilent:false` = 没调工具就真的一个字都不发 |
 | `approvalPolicy` | `never` | QQ 会话的审批策略。`never` = 工具要审批就直接拒，不等人；设成 `ask` 会卡死在审批上 |
 | `unstickOnStart` | `true` | 插件启动时把已知会话里挂住的回合取消掉 |
 
@@ -76,6 +77,33 @@ QQ 客户端 ←→ NapCat(OneBot 11) ←→ 本插件 ←→ DSH 会话 ←→ 
 
 **成本**：每个触发轮多 300~500 token，和砍掉的 6 行摘要基本抵平。想更省，把 `maxMessages` 调到 10、`maxChars` 到 400。
 
+## 工具模式（0.5.0）
+
+以前是「这一轮输出的文字自动发到 QQ」。0.5.0 起换成工具：给她一组 `qq_*` 工具，
+**发言必须调 `qq_send_message`**，文字输出只是思考，不发出去。
+
+| 工具 | 干什么 |
+| --- | --- |
+| `qq_send_message` | 发一条。自动去 markdown、按句分条、过限速 |
+| `qq_send_burst` | 一次发多条，每条一个气泡（最多 5 条） |
+| `qq_get_recent_messages` | 回看最近说过什么 |
+| `qq_wait_for_messages` | 等对方接着说（最多 5 分钟）。等待期间到的消息由工具收下，**不另开一轮**，所以不会回两次 |
+| `qq_close_conversation` | 记一句「收在哪、下次怎么接」，下一轮提示词开头带上 |
+
+为什么换：自动转发时出站消息没法逐条拦截；换成工具后，「想说什么」和「真的发了」之间多了一个闸门。
+发送口只有一个（`tools.js` 的 `deliver()`），每日总量、每会话冷却、每小时上限、分条，都在那一处。
+
+**三个安全阀**：
+
+1. 工具只挂在 QQ 会话的 agent 上（`agent.ctx.tools.register`），网页里的会话看不见它们——和 `scene` 一样是 agent 作用域。
+2. 挂不上工具（拿不到 `tools` 服务、注册抛错）就自动退回**老的自动转发**，只留一行日志，不会把话吞掉。
+3. `tools.fallbackOnSilent` 默认 `true`：模型没调工具却写了文字时补发，`qq.log` 里留一行 `silent-turn`。
+   **等连续几天日志里没有 `silent-turn`，再把它设成 `false`** —— 那才是真正的「说了才算」。
+
+**成本**：每轮多一份工具清单（约 300 token），但省掉「不发言也要把整段话输出一遍」的浪费，大致抵平。
+
+**排错**：`qq.log` 里看 `tools: 已挂` / `tools: 退回自动转发` / `tool send` / `silent-turn` 四种行，比看 QQ 准。
+
 ## 看状态
 
 - 日志：`~/.dsh/xi-qq/qq.log`（超过 1MB 自动轮转成 `qq.log.1`）
@@ -105,6 +133,7 @@ selftest: kind=completed text="通道通了"
 ## 限制
 
 - 只处理文字；图片/语音/表情只留占位符 `[图片]`，不做识别
+- **工具模式下，模型可能忘记调工具**：日志里出现 `silent-turn` 就是这个。`fallbackOnSilent` 先兜着，真调顺了再关
 - **不在场的时间她自己补不回来**：没触发时不会跑模型，只在开口那一刻看到最近 20 条；更早的要翻转录文件
 - 不做流式，等整轮结束后一次发出
 - 依赖本机 DSH 常驻运行；DSH 关掉或电脑休眠时就收不到消息

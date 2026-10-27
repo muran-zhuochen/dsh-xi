@@ -75,6 +75,14 @@ export const DEFAULTS = {
   // 群聊近况：她开口时把最近几条一起挂进提示词（不额外跑模型，只多这几行字）
   scene: { enabled: true, maxMessages: 20, maxChars: 800 },
 
+  // 工具面：发言从「自动转发」改成「显式工具调用」（参照 surfcore 的 reserved2）
+  //   enabled            true = 给 QQ 会话挂 qq_* 工具，文本输出不再自动发出去
+  //   fallbackOnSilent   true = 这一轮没发出任何消息、但模型写了文字时，按旧行为补发
+  //                      （宁可多发一句也别漏话）；确认工具稳定后再关掉，才是真正的「说了才算」
+  //   minIntervalSec     两条消息之间最短间隔
+  //   maxPerHour         每会话每小时最多发几条
+  tools: { enabled: true, fallbackOnSilent: true, minIntervalSec: 2, maxPerHour: 60 },
+
   // QQ 会话的审批策略：never = 不等人，工具直接拒（否则会卡死在审批上）
   approvalPolicy: 'never',
   // 插件启动时把已知会话里挂住的回合清掉

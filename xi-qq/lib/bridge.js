@@ -132,7 +132,7 @@ export function createBridge({ getService, getSettings, trace, scenes }) {
   /**
    * 备好一轮：拿到会话、钉住审批策略、把群聊近况挂上去。
    * 场景挂上了，调用方就不用再往正文里塞摘要。
-   * @returns {Promise<{sessionId: string, scene: boolean}>}
+   * @returns {Promise<{sessionId: string, scene: boolean, agent: object|null}>}
    */
   async function prepare(peer) {
     const sessionId = await ensureSession(peer)
@@ -144,7 +144,8 @@ export function createBridge({ getService, getSettings, trace, scenes }) {
     } catch (err) {
       trace(`scene failed ${sessionId}: ${err.message}`)
     }
-    return { sessionId, scene }
+    // agent 要给调用方，工具面得挂在它的 ctx 上（agent 作用域，别的会话看不见）
+    return { sessionId, scene, agent }
   }
 
   /**
