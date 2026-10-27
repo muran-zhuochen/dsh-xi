@@ -100,14 +100,6 @@ window.__ModuleLoader__.load({
   letter-spacing:.4px;padding:2px 8px;border-radius:6px;border:1px solid var(--xi-line);
   background:color-mix(in srgb,currentColor 6%,transparent);cursor:text;user-select:all}
 .xi-copied{color:var(--xi-accent);border-color:color-mix(in srgb,var(--xi-accent) 55%,transparent)}
-.xi-napcat{--xi-line:color-mix(in srgb,currentColor 14%,transparent);
-  --xi-muted:color-mix(in srgb,currentColor 58%,transparent);--xi-dim:color-mix(in srgb,currentColor 42%,transparent);
-  --xi-accent:#1f9d8f;height:100%;min-height:0;display:flex;flex-direction:column}
-.xi-napcat-bar{display:flex;align-items:center;gap:8px;flex:0 0 auto;padding:7px 12px;
-  border-bottom:1px solid var(--xi-line);font-size:12px}
-.xi-napcat-title{font-size:13px;font-weight:650;letter-spacing:.3px}
-.xi-napcat-sub{color:var(--xi-dim);font-size:11.5px}
-.xi-napcat-frame{flex:1 1 auto;width:100%;min-height:0;border:0;background:#fff}
 /* 白名单：一个号一个胶囊，× 移出；下面一行输入框加号 */
 .xi-wl-head{display:flex;align-items:baseline;gap:8px;margin-bottom:8px;font-size:12.5px}
 .xi-wl-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
@@ -149,12 +141,7 @@ window.__ModuleLoader__.load({
     // 两个数据源：先试宿主接口（插件宿主半侧正常时），失败再退到独立控制台（本机 57321）。
     const SOURCES = ['api/dsh-xi/state', 'http://127.0.0.1:57321/api/state']
 
-    // NapCat 协议端：WebUI 与登录密码。密码来自
-    // ~/.dsh/xi-qq/napcat/app/napcat/config/webui.json 的 token。
-    const NAPCAT_URL = 'http://127.0.0.1:6099/webui/'
-    const NAPCAT_TOKEN = '02f19495458f'
-    // apply() 里接上宿主布局服务；QQ 次级页只负责触发。
-    let openNapcatPanel = () => {}
+    // NapCat 端已于 2026-10-28 拆除，WebUI/密码/面板相关常量一并移除。
 
     function useData() {
       const [data, setData] = use.useState(null)
@@ -367,85 +354,10 @@ window.__ModuleLoader__.load({
       if (!ok) throw new Error('clipboard unavailable')
     }
 
-    /** QQ 次级页置顶的 NapCat 入口：打开 WebUI + 密码复制。 */
-    function NapcatEntry({ qq }) {
-      const [copied, setCopied] = use.useState(false)
-      const [copyErr, setCopyErr] = use.useState('')
-      const timer = use.useRef(0)
-      use.useEffect(() => () => clearTimeout(timer.current), [])
-      const copy = async () => {
-        try {
-          await copyText(NAPCAT_TOKEN)
-          setCopied(true); setCopyErr('')
-          clearTimeout(timer.current)
-          timer.current = setTimeout(() => setCopied(false), 1600)
-        } catch (e) {
-          setCopied(false)
-          setCopyErr('复制失败，手动选中密码')
-        }
-      }
-      return h('div', {
-        className: 'xi-card',
-        style: { marginBottom: 12, borderColor: 'color-mix(in srgb,var(--xi-accent) 38%,var(--xi-line))' },
-      },
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-          h('h4', { style: { margin: 0 } }, 'napcat · WebUI'),
-          h('span', { className: 'xi-chip', style: { margin: 0, padding: '1px 8px', fontSize: 11 } }, '置顶')),
-        h('div', { className: 'xi-dim', style: { marginTop: 7 } },
-          qq.napcat ? '协议端在跑，WebUI 已就绪。' : '协议端没在跑，先在下面「启动 NapCat」。'),
-        h('div', { className: 'xi-row', style: { marginTop: 10 } },
-          h('button', {
-            className: 'xi-btn xi-primary', type: 'button',
-            onClick: () => openNapcatPanel(),
-          }, '打开 NapCat'),
-          h('span', { className: 'xi-dim' }, '在左侧侧边栏打开')),
-        h('div', { className: 'xi-token' },
-          h('span', { className: 'xi-dim' }, 'WebUI 密码'),
-          h('code', { className: 'xi-code' }, NAPCAT_TOKEN),
-          h('button', {
-            className: 'xi-btn' + (copied ? ' xi-copied' : ''), type: 'button', onClick: copy,
-          }, copied ? '已复制' : '复制'),
-          copyErr ? h('span', { className: 'xi-rose' }, copyErr) : null),
-        h('div', { className: 'xi-dim', style: { marginTop: 7 } }, NAPCAT_URL))
-    }
-
-    /** 左侧边栏的 NapCat 面板：WebUI 整个挂进来。 */
-    function NapcatPanel() {
-      const [nonce, setNonce] = use.useState(0)
-      return h('div', { className: 'xi-napcat' },
-        h('div', { className: 'xi-napcat-bar' },
-          h('span', { className: 'xi-napcat-title' }, 'NapCat'),
-          h('span', { className: 'xi-napcat-sub' }, '127.0.0.1:6099/webui'),
-          h('span', { style: { flex: 1 } }),
-          h('button', {
-            className: 'xi-btn', type: 'button',
-            onClick: () => setNonce((n) => n + 1),
-          }, '刷新'),
-          h('a', {
-            className: 'xi-btn', href: NAPCAT_URL, target: '_blank', rel: 'noreferrer',
-            style: { textDecoration: 'none' },
-          }, '新窗口')),
-        h('iframe', {
-          key: nonce, className: 'xi-napcat-frame', src: NAPCAT_URL, title: 'NapCat WebUI',
-        }))
-    }
-
-    function NapCatIcon(props) {
-      const size = typeof props.size === 'number' ? props.size : 18
-      return h('svg', {
-        width: size, height: size, viewBox: '0 0 24 24', fill: 'none',
-        stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round',
-      },
-        h('path', { d: 'M4.2 10 5.4 4.4l4 2.3h5.2l4-2.3 1.2 5.6v4.7A4.3 4.3 0 0 1 15.5 19h-7A4.3 4.3 0 0 1 4.2 14.7z' }),
-        h('circle', { cx: 9.2, cy: 12, r: .85, fill: 'currentColor', stroke: 'none' }),
-        h('circle', { cx: 14.8, cy: 12, r: .85, fill: 'currentColor', stroke: 'none' }),
-        h('path', { d: 'M9.6 15.3h4.8' }))
-    }
-
-    /** 接入页的 QQ 入口：只看状态，点进去才是 NapCat 次级页。 */
+    /** 接入页的 QQ 入口：只看状态，点进去才是 QQ 通道次级页。 */
     function QqEntry({ qq, onOpen }) {
-      const state = qq.connected ? '已连接' : (qq.napcat ? '协议端在跑，桥没连上' : '协议端没在跑')
-      const dot = qq.connected ? 'ready' : (qq.napcat ? 'planned' : '')
+      const state = qq.connected ? '已连接' : '未连接'
+      const dot = qq.connected ? 'ready' : ''
       return h('div', {
         className: 'xi-card xi-click', role: 'button', tabIndex: 0,
         style: { marginBottom: 10 },
@@ -458,9 +370,8 @@ window.__ModuleLoader__.load({
           h('span', { className: 'xi-dim', style: { fontWeight: 400 } }, state)),
         h('div', { className: 'xi-kv' },
           h('div', null, '账号', h('b', null, qq.selfId || '—')),
-          h('div', null, '会话', h('b', null, String(qq.peers || 0))),
-          h('div', null, 'NapCat', h('b', null, qq.napcat ? '运行中' : '未运行'))),
-        h('div', { className: 'xi-dim', style: { marginTop: 10 } }, '进入 NapCat →'))
+          h('div', null, '会话', h('b', null, String(qq.peers || 0)))),
+        h('div', { className: 'xi-dim', style: { marginTop: 10 } }, '进入 QQ 通道 →'))
     }
 
     /**
@@ -596,13 +507,12 @@ window.__ModuleLoader__.load({
       const usersWl = pick('allowUsers')
       // 只改一个字段也走深合并，不用回传整块
       const set = (patch, label) => { void post({ patch }, label) }
-      const state = view.connected ? '已连接' : (view.napcat ? '协议端在跑，桥没连上' : '协议端没在跑')
-      const dot = view.connected ? 'ready' : (view.napcat ? 'planned' : '')
+      const state = view.connected ? '已连接' : '未连接'
+      const dot = view.connected ? 'ready' : ''
       return h('div', null,
         h('div', { className: 'xi-row', style: { marginTop: 0, marginBottom: 10 } },
           h('button', { className: 'xi-btn', onClick: onBack }, '← 返回'),
-          h('span', { className: 'xi-dim' }, '通道 / QQ / NapCat')),
-        h(NapcatEntry, { qq: view }),
+          h('span', { className: 'xi-dim' }, '通道 / QQ')),
         h('div', { className: 'xi-card', style: { marginBottom: 12 } },
           h('h4', null, 'channel · qq · v' + (view.version || '0.3.0')),
           h('div', { style: { fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 } },
@@ -611,28 +521,15 @@ window.__ModuleLoader__.load({
           h('div', { className: 'xi-kv' },
             h('div', null, '账号', h('b', null, view.selfId || '—')),
             h('div', null, '会话', h('b', null, String(view.peers || 0))),
-            h('div', null, 'NapCat', h('b', null, view.napcat ? '运行中' : '未运行')),
             h('div', null, '桥', h('b', null, view.enabled === false ? '已停用' : (view.connected ? '在线' : '待连'))),
-            h('div', null, '最近', h('b', null, view.at ? new Date(view.at).toLocaleTimeString('zh-CN') : '—'))),
-          view.napcat ? null : h('div', { className: 'xi-row' },
-            h('button', {
-              className: 'xi-btn', disabled: busy !== '',
-              onClick: () => post({ action: 'start-napcat' }, 'napcat'),
-            }, busy === 'napcat' ? '正在拉起…' : '启动 NapCat'),
-            h('span', { className: 'xi-dim' }, '会弹一次 UAC，点「是」'))),
+            h('div', null, '最近', h('b', null, view.at ? new Date(view.at).toLocaleTimeString('zh-CN') : '—')))),
         h('div', { className: 'xi-sect' }, '开关'),
         h('div', { className: 'xi-card', style: { marginBottom: 12 } },
           h(Toggle, {
             on: view.enabled !== false, disabled: busy !== '',
             onChange: (v) => flip({ enabled: v }, 'enabled'),
             title: '启用 QQ 通道',
-            hint: '关掉后 QQ 消息不再进会话；NapCat 和登录都还在',
-          }),
-          h(Toggle, {
-            on: !!view.autostart, disabled: busy !== '',
-            onChange: (v) => flip({ autostart: v }, 'autostart'),
-            title: 'NapCat 自启动',
-            hint: 'DSH 起来时 NapCat 没在跑就拉起来，掉了五分钟内补一次',
+            hint: '关掉后 QQ 消息不再进会话；协议端要另外接一个 OneBot 11 服务',
           }),
           err ? h('div', { className: 'xi-rose', style: { marginTop: 10 } }, err) : null),
 
@@ -773,8 +670,6 @@ window.__ModuleLoader__.load({
         h('div', { className: 'xi-sect' }, '位置'),
         h('div', { className: 'xi-card' },
           h('div', { className: 'xi-kv', style: { marginTop: 0 } },
-            h('div', null, 'WebUI', h('b', { style: { fontSize: 12.5, fontWeight: 500 } }, '127.0.0.1:6099/webui')),
-            h('div', null, '协议端', h('b', { style: { fontSize: 12.5, fontWeight: 500 } }, '~/.dsh/xi-qq/napcat')),
             h('div', null, '桥日志', h('b', { style: { fontSize: 12.5, fontWeight: 500 } }, '~/.dsh/xi-qq/qq.log')),
             h('div', null, '连接', h('b', { style: { fontSize: 12.5, fontWeight: 500 } }, 'ws://127.0.0.1:3001'))),
           h('div', { className: 'xi-note', style: { marginBottom: 0 } },
@@ -788,7 +683,7 @@ window.__ModuleLoader__.load({
       if (sub === 'qq') return h(QqDetail, { qq, onRefresh, onBack: () => setSub('') })
       return h('div', null,
         h('div', { className: 'xi-note' },
-          'QQ 已经接上了：消息进会话，回复回 QQ。点卡片进 NapCat 次级页，开关和诊断都在里面。'),
+          'QQ 通道：往 ws://127.0.0.1:3001 接一个 OneBot 11 服务就能用。点卡片看开关、白名单和频率。'),
         h('div', { className: 'xi-sect' }, '通道'),
         h(QqEntry, { qq, onOpen: () => setSub('qq') }),
         others.length ? h('div', { className: 'xi-sect' }, '其他') : null,
@@ -903,14 +798,7 @@ window.__ModuleLoader__.load({
 
     function apply(ctx) {
       ensureStyle()
-      openNapcatPanel = () => ctx.layout.selectPanel('napcat')
-      // NapCat 面板：左侧边栏入口 + WebUI 主面板；QQ 次级页的按钮也跳到这里。
-      ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-        name: 'sidebar.panellist', id: 'napcat', order: 24, label: () => 'NapCat',
-      }, (props) => h(NapCatIcon, props)))
-      ctx.slots.inject('main', () => ctx.slots.register({
-        name: 'main', key: 'napcat',
-      }, () => h(NapcatPanel)))
+      // NapCat 已下线（2026-10-28）：边栏只留「汐」。
       // 左侧边栏入口 → 打开 main 面板（汐的主页）
       ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
         name: 'sidebar.panellist', id: 'xi', order: 25, label: () => '汐',

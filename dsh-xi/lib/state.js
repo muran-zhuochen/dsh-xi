@@ -16,6 +16,15 @@ export function resolveDataDir(config = {}) {
   return path.join(DSH_HOME, 'xi')
 }
 
+/**
+ * 人格目录：SOUL.md 放在这里。
+ * 人格与记忆分家时由 profile 配置 personaDir；没配就跟记忆同目录，保持老行为。
+ */
+export function resolvePersonaDir(config = {}, dataDir = resolveDataDir(config)) {
+  if (config && typeof config.personaDir === 'string' && config.personaDir.trim()) return config.personaDir.trim()
+  return dataDir
+}
+
 const read = (p) => { try { return fs.readFileSync(p, 'utf8') } catch { return null } }
 const stat = (p) => { try { return fs.statSync(p) } catch { return null } }
 
@@ -167,13 +176,14 @@ function parseChannels() {
   }
 }
 
-export function buildState(root = process.cwd(), dir = resolveDataDir()) {
+export function buildState(root = process.cwd(), dir = resolveDataDir(), personaDir = dir) {
   return {
     updatedAt: new Date().toISOString(),
     plugin: { version: PLUGIN_VERSION },
-    onboarding: !hasPersona(dir),
+    onboarding: !hasPersona(personaDir),
     dataDir: dir,
-    soul: parseSoul(dir),
+    personaDir,
+    soul: parseSoul(personaDir),
     mood: parseMood(dir),
     memory: parseMemory(dir),
     diary: latestDiary(dir),

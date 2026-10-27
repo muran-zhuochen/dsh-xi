@@ -15,9 +15,12 @@ QQ ←→ NapCat(OneBot 11) ←→ dsh-xi-qq ←→ DSH 会话 ←→ 汐
 | 目录 | 包名 | 作用 |
 | --- | --- | --- |
 | `dsh-xi/` | `dsh-xi` | 控制台插件。左侧边栏「汐」入口，七个面板：总览、记忆、心情、成本、接入、形象·语音、性格。接入页里有 QQ 通道的状态、开关和聊天频率。 |
-| `dsh-xi-qq/` | `dsh-xi-qq` | QQ 桥（宿主侧，无界面）。连 NapCat 的 OneBot 11 WebSocket，QQ 消息进 DSH 会话，回复回 QQ。 |
+| `xi-qq/` | `dsh-xi-qq` | QQ 桥（宿主侧，无界面）。连 NapCat 的 OneBot 11 WebSocket，QQ 消息进 DSH 会话，回复回 QQ。 |
 
 两个包互相独立，但 QQ 通道要两个都装：`dsh-xi-qq` 负责收发，`dsh-xi` 负责画界面和管开关。
+
+仓库根同时就是运行目录：DSH 加载的 `dsh-xi/`、`xi-qq/` 就是这里的文件，没有第二份副本。
+改代码、回退、重启，动的是同一堆文件。运行时数据（`qq/`、`日志/`）在 `.gitignore` 里，不进仓库。
 
 ## 安装
 
@@ -25,7 +28,7 @@ QQ ←→ NapCat(OneBot 11) ←→ dsh-xi-qq ←→ DSH 会话 ←→ 汐
 # 1. 把仓库放进任意目录，然后以本地目录安装（DSH 的 plugin_manager 也支持）
 # 2. profile 的 package.json 里加依赖
 "dsh-xi": "link:../path/to/dsh-xi"
-"dsh-xi-qq": "link:../path/to/dsh-xi-qq"
+"dsh-xi-qq": "link:../path/to/xi-qq"
 
 # 3. 在 profile 的 bundles 列表里加上两个包名，重启 DSH
 ```
@@ -92,6 +95,13 @@ QQ ←→ NapCat(OneBot 11) ←→ dsh-xi-qq ←→ DSH 会话 ←→ 汐
 - 不做流式，等整轮跑完再发，中间靠「正在输入」撑着。
 - DSH 的会话接口只有「喂一条 → 跑一轮」，没有「只记上下文不跑模型」，所以群里没触发她的消息她看不见，只能靠回复时补一段最近对话摘要。
 - 第三方协议端有账号风险，用小号。
+
+## 开发与回退
+
+- 一次功能一个 commit，重启验证过再提交；发版打 tag（`v0.7.1` 起）。
+- 拉取只要 `git pull --ff-only`，合不了就停，不用自动 merge。
+- 回退后要重启 DSH（`lib/` 是宿主加载，`client.js` 是页面加载），不是只刷页面。
+- 决策、目录约定、回退命令：`docs/决策记录.md`。
 
 ## License
 

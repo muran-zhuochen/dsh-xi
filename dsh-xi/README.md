@@ -49,6 +49,8 @@ archive/facts/     退档的事实（不删）
 
 - 如果 `~/.dsh/memory/SOUL.md` 已经存在（比如从旧版升级），**优先用旧目录**，不会迁移、不会覆盖。
 - 也可以在 profile 里指定 `config: { dataDir: "..." }` 强制换目录。
+- 人格与记忆分家：再加 `personaDir: "..."`，`SOUL.md` 从那里读，其余（`MEMORY.md` / `MOOD.md` / `diary/` / `archive/`）仍在 `dataDir`；不配时 `personaDir` 就等于 `dataDir`，行为不变。
+- 例：`config: { dataDir: "E:/Ai-Agent/汐/记忆", personaDir: "E:/Ai-Agent/汐/人格" }`
 
 ## 界面
 

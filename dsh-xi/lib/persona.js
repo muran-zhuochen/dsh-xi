@@ -144,26 +144,28 @@ export function renderMood() {
 
 const MARKER = 'SOUL.md'
 
-/** 首次安装才写；已经有人设的文件一个都不碰。 */
-export function initPersona(dir, input = {}) {
-  const soulPath = path.join(dir, MARKER)
+/** 首次安装才写；已经有人设的文件一个都不碰。人设写 personaDir，记忆写 dataDir。 */
+export function initPersona(personaDir, dataDir = personaDir, input = {}) {
+  if (dataDir && typeof dataDir === 'object') { input = dataDir; dataDir = personaDir }
+  const soulPath = path.join(personaDir, MARKER)
   if (fs.existsSync(soulPath)) return { ok: false, reason: 'has-persona' }
 
-  fs.mkdirSync(dir, { recursive: true })
-  fs.mkdirSync(path.join(dir, 'diary'), { recursive: true })
-  fs.mkdirSync(path.join(dir, 'archive', 'facts'), { recursive: true })
+  fs.mkdirSync(personaDir, { recursive: true })
+  fs.mkdirSync(dataDir, { recursive: true })
+  fs.mkdirSync(path.join(dataDir, 'diary'), { recursive: true })
+  fs.mkdirSync(path.join(dataDir, 'archive', 'facts'), { recursive: true })
 
   const created = []
-  const write = (file, content) => {
-    const p = path.join(dir, file)
+  const write = (base, file, content) => {
+    const p = path.join(base, file)
     if (fs.existsSync(p)) return
     fs.writeFileSync(p, content)
     created.push(file)
   }
-  write('SOUL.md', renderSoul(input))
-  write('MEMORY.md', renderMemory(input))
-  write('MOOD.md', renderMood())
-  write(path.join('diary', `${new Date().toISOString().slice(0, 10)}.md`),
+  write(personaDir, 'SOUL.md', renderSoul(input))
+  write(dataDir, 'MEMORY.md', renderMemory(input))
+  write(dataDir, 'MOOD.md', renderMood())
+  write(dataDir, path.join('diary', `${new Date().toISOString().slice(0, 10)}.md`),
     `# ${new Date().toISOString().slice(0, 10)}\n\n第一天。被装好了。\n`)
 
   return { ok: true, created }

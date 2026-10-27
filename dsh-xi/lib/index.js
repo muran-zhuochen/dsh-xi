@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { buildState, resolveDataDir, DSH_HOME } from './state.js'
+import { buildState, resolveDataDir, resolvePersonaDir, DSH_HOME } from './state.js'
 import { initPersona, hasPersona } from './persona.js'
 import { runMigrations, PLUGIN_VERSION } from './upgrade.js'
 import { qqSnapshot, patchQqSettings, readQqSettings, startNapCat, portOpen } from './qqlink.js'
@@ -21,7 +21,8 @@ function trace(msg) {
 
 export function apply(ctx, config) {
   const dataDir = resolveDataDir(config || {})
-  trace('apply-enter dir=' + dataDir)
+  const personaDir = resolvePersonaDir(config || {}, dataDir)
+  trace('apply-enter dir=' + dataDir + ' persona=' + personaDir)
   try {
     runMigrations((m) => trace('migration: ' + m), dataDir)
   } catch (err) {
@@ -36,12 +37,12 @@ export function apply(ctx, config) {
     try { return await request.json() } catch { return {} }
   }
 
-  const stateHandler = async () => json(buildState(ROOT, dataDir))
+  const stateHandler = async () => json(buildState(ROOT, dataDir, personaDir))
 
   const initHandler = async (request) => {
-    if (hasPersona(dataDir)) return json({ ok: false, reason: 'has-persona' }, 409)
+    if (hasPersona(personaDir)) return json({ ok: false, reason: 'has-persona' }, 409)
     const input = await readBody(request)
-    const result = initPersona(dataDir, input || {})
+    const result = initPersona(personaDir, dataDir, input || {})
     trace('init ' + JSON.stringify(result))
     return json(result)
   }
