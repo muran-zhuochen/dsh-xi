@@ -1,0 +1,8 @@
+{
+  "id": "voice",
+  "name": "语音",
+  "type": "voice",
+  "status": "planned",
+  "version": "0.0.1",
+  "description": "TTS 朗读与语音输入。预留：DSH 已装 speech-to-text，接入时只需补一个输出通道。"
+}

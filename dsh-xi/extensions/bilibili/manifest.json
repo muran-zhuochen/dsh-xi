@@ -1,0 +1,8 @@
+{
+  "id": "bilibili",
+  "name": "B 站",
+  "type": "channel",
+  "status": "planned",
+  "version": "0.0.1",
+  "description": "私信、动态、直播弹幕接入。预留：需要扫码登录与消息轮询，未实现。"
+}

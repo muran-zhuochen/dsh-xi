@@ -1,0 +1,4 @@
+# Bundle patch layer: 宿主半侧是普通 Cordis 插件；`dsh.client` 声明让 web 端加载 ./client 半侧。
+- insert:
+    - id: dsh-xi
+      name: dsh-xi

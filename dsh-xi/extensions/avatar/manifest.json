@@ -1,0 +1,8 @@
+{
+  "id": "avatar",
+  "name": "个人形象",
+  "type": "avatar",
+  "status": "planned",
+  "version": "0.0.1",
+  "description": "立绘 / Live2D / 表情。预留：插件提供一个静态资源目录和动作协议即可接入。"
+}

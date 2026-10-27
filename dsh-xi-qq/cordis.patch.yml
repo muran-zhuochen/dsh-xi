@@ -1,0 +1,6 @@
+# Bundle patch layer: 宿主半侧插件，无 web 客户端。
+# 配置在 ~/.dsh/xi-qq/settings.json 里改，改完重启 DSH 生效。
+- insert:
+    - id: dsh-xi-qq
+      name: dsh-xi-qq
+      config: {}

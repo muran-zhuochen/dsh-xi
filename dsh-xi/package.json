@@ -1,0 +1,29 @@
+{
+  "name": "dsh-xi",
+  "version": "0.6.0",
+  "description": "汐 · 控制台：记忆、心情、成本、QQ 通道与聊天频率，以及形象/语音/B站的预留接口",
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "client.js",
+    "extensions",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  }
+}

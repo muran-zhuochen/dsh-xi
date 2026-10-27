@@ -1,0 +1,17 @@
+node_modules/
+*.log
+
+# 运行时数据，绝不进仓库
+settings.json
+status.json
+sessions.json
+dsh-url.txt
+qr.png
+
+# 本地调试产物
+.playwright-mcp/
+.preview.html
+.preview.png
+*.zip
+.DS_Store
+Thumbs.db
