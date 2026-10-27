@@ -45,6 +45,7 @@ QQ 客户端 ←→ NapCat(OneBot 11) ←→ 本插件 ←→ DSH 会话 ←→ 
 | `groupPolicy.ambient` | `{enabled:false, trigger:'keywords', minIntervalSec:600, maxPerHour:3, chance:0.5, keywords:[...]}` | 没被 @ 时主动接话：触发 → 冷却 → 上限 → 掷骰子，四道闸。`trigger:'any'` = 群里任何一句都算触发（纯表情/单字除外），`'keywords'` = 只认关键词或问句 |
 | `limits` | `{dailyEnabled:true, dailyReplies:200}` | 全通道每日总条数，过零点重置 |
 | `chat` | `{chunkReply:true, maxChunks:3, typing:true, styleNote:true, styleNoteText:''}` | 分条发、显示正在输入、会话开头那句说话风格（`styleNoteText` 留空用内置文案） |
+| `scene` | `{enabled:true, maxMessages:20, maxChars:800}` | 群聊近况：开口时把最近几条挂进提示词。关掉就退回正文里 6 行摘要 |
 | `approvalPolicy` | `never` | QQ 会话的审批策略。`never` = 工具要审批就直接拒，不等人；设成 `ask` 会卡死在审批上 |
 | `unstickOnStart` | `true` | 插件启动时把已知会话里挂住的回合取消掉 |
 
@@ -62,6 +63,18 @@ QQ 客户端 ←→ NapCat(OneBot 11) ←→ 本插件 ←→ DSH 会话 ←→ 
 被限流的那条**不会进模型**，所以不花钱，只在 `qq.log` 留一行 `限流（cooldown/hourly/daily）`。
 
 群聊回话时会先垫一段「最近 6 条」摘要（谁说了什么），否则她只看得到被触发的那一句，接不上话。摘要只进 prompt，不进会话历史。
+
+## 群聊近况（scene）
+
+白名单里的**每一条**消息都会落进转录（`~/.dsh/xi-qq/transcripts/group_<群号>.jsonl`，一个对端一个文件，2MB 轮转、只留最近 400 行），不管有没有点名她。
+
+她开口时，这段近况会以 **agent 作用域**挂进那一轮提示词：`systemPrompt.context({ name: 'qq-scene' })`，只对那个 QQ 会话生效——阿晚在网页里跟我说话时，提示词里不会有任何 QQ 内容。默认最近 20 条、总量 800 字，正在回的那条会跳过，免得和正文重复。
+
+为什么不做「全程监听」：DSH 没有「只写上下文不跑模型」的接口，`prompt` 一定驱动一轮。真要做到每条都进模型，就得每条烧一轮——那是钱买来的在场，不值。
+
+挂不上的情况（拿不到 `systemPrompt`、注册冲突）会自动退回老的 6 行摘要，只留一行 `scene: ... 退回正文摘要` 的日志。
+
+**成本**：每个触发轮多 300~500 token，和砍掉的 6 行摘要基本抵平。想更省，把 `maxMessages` 调到 10、`maxChars` 到 400。
 
 ## 看状态
 
@@ -92,6 +105,7 @@ selftest: kind=completed text="通道通了"
 ## 限制
 
 - 只处理文字；图片/语音/表情只留占位符 `[图片]`，不做识别
+- **不在场的时间她自己补不回来**：没触发时不会跑模型，只在开口那一刻看到最近 20 条；更早的要翻转录文件
 - 不做流式，等整轮结束后一次发出
 - 依赖本机 DSH 常驻运行；DSH 关掉或电脑休眠时就收不到消息
 - 第三方协议端有账号风险，用小号更稳妥

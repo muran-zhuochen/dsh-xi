@@ -9,13 +9,14 @@ import { createBridge } from './bridge.js'
 import { loadSettings, log, readJson, REJECTED_PATH, SETTINGS_PATH, STATUS_PATH, writeJson } from './settings.js'
 import { extractText, isAtSelf, toPlain, splitText, splitChat } from './text.js'
 import { createLimiter } from './rate.js'
+import { createTranscript } from './transcript.js'
+import { createScenes } from './scene.js'
 
 export const name = 'dsh-xi-qq'
 
-const VERSION = '0.3.0'
+const VERSION = '0.4.0'
 const POLL_MS = 2000
 const HEARTBEAT_MS = 30000
-const DIGEST_MAX = 6
 // 说话风格注入版本：文案改了就把数字 +1，老会话会重发一次新文案
 const STYLE_VERSION = 2
 const STYLE_NOTE = '（QQ 通道）现在是在 QQ 上聊天，不是在交作业：口语、短句，不用 markdown 和列表。该短就短，该展开就展开，可以贫、可以顶回来、可以只回一个字。别端着，别写成报告。'
@@ -38,10 +39,11 @@ export function apply(ctx, config) {
     } catch { return undefined }
   }
 
-  const bridge = createBridge({ getService, getSettings: () => settings, trace })
+  const transcript = createTranscript({ trace })
+  const scenes = createScenes({ trace, getSettings: () => settings, transcript })
+  const bridge = createBridge({ getService, getSettings: () => settings, trace, scenes })
   const limiter = createLimiter()
   const styled = new Set(Object.keys(bridge.known).filter((k) => (bridge.known[k]?.styleVersion || 0) >= STYLE_VERSION))
-  const recent = new Map() // groupId -> [{name, text, at}]
   const typingOk = { private: true, group: true }
 
   // 白名单外来找过的人/群：只记一笔（不建会话、不回话），控制台里能看到并一键加进来。
@@ -150,19 +152,6 @@ export function apply(ctx, config) {
     return String(s.card || s.nickname || s.user_id || '某人').slice(0, 24)
   }
 
-  function pushRecent(groupId, name, text) {
-    const list = recent.get(groupId) || []
-    list.push({ name, text: String(text).slice(0, 80), at: Date.now() })
-    while (list.length > DIGEST_MAX) list.shift()
-    recent.set(groupId, list)
-  }
-
-  function digestFor(groupId) {
-    const list = (recent.get(groupId) || []).slice(0, -1) // 最后一条就是触发这句，正文里已有
-    if (list.length < 2) return ''
-    return '最近群聊：\n' + list.map((x) => `${x.name}：${x.text}`).join('\n')
-  }
-
   async function setTyping(kind, target, on) {
     if (!settings.chat?.typing || !bot || !bot.isUp()) return
     if (!typingOk[kind]) return
@@ -200,10 +189,13 @@ export function apply(ctx, config) {
         warnOnce(`private:${userId}`, `skip private ${userId}（${name}）：不在私聊白名单 allowUsers，已忽略`)
         return
       }
-      const gate = limiter.allow(`private:${userId}`, settings.privateChat || {})
+      const peer = `private:${userId}`
+      transcript.record(peer, { id: event.message_id, name, uid: userId, text })
+      const gate = limiter.allow(peer, settings.privateChat || {})
       if (!gate.ok) { trace(`private ${userId} 限流（${gate.reason}）`); return }
-      enqueue(`private:${userId}`, () => reply({
-        kind: 'private', target: userId, peer: `private:${userId}`, userId, name, text,
+      enqueue(peer, () => reply({
+        kind: 'private', target: userId, peer, userId, name, text,
+        messageId: event.message_id,
       }))
       return
     }
@@ -225,10 +217,11 @@ export function apply(ctx, config) {
     const bare = mentioned && !clean
     if (!clean && !mentioned) return
     const body = bare ? '（只 @ 了我，没有正文）' : clean
-    pushRecent(groupId, name, bare ? '@ 了你' : clean)
+    const peer = `group:${groupId}`
+    // 白名单里的每一条都落盘，不管点没点我——她开口的时候才看得见刚才发生了什么
+    transcript.record(peer, { id: event.message_id, name, uid: userId, text: bare ? '@ 了你' : clean })
 
     const policy = settings.groupPolicy || {}
-    const peer = `group:${groupId}`
 
     if (mentioned) {
       const mention = policy.mention || {}
@@ -237,7 +230,7 @@ export function apply(ctx, config) {
       if (!gate.ok) { trace(`group ${groupId} @ 限流（${gate.reason}）`); return }
       enqueue(peer, () => reply({
         kind: 'group', target: groupId, peer, userId, name, text: body,
-        preface: digestFor(groupId),
+        messageId: event.message_id,
         prompt: bare
           ? `${name} 只 @ 了你，没写正文。用一句自然的反应回他，别长篇。`
           : `${name}：${clean}`,
@@ -269,19 +262,31 @@ export function apply(ctx, config) {
     trace(`group ${groupId} 主动插话：${clean.slice(0, 40)}`)
     enqueue(peer, () => reply({
       kind: 'group', target: groupId, peer, userId, name, text: clean,
-      preface: digestFor(groupId),
+      messageId: event.message_id,
       prompt: `${name}：${clean}\n（这条没有点名你，你想接就接，不想接就只回一个 SKIP。）`,
       skipOnSilence: true,
     }))
   }
 
-  async function reply({ kind, target, peer, name, text, preface = '', prompt = '', skipOnSilence = false }) {
+  async function reply({ kind, target, peer, name, text, messageId, prompt = '', skipOnSilence = false }) {
     if (settings.limits?.dailyEnabled !== false) {
       const day = limiter.dailyAllow(settings.limits?.dailyReplies)
       if (!day.ok) { trace(`今日总量到顶（${day.used}），跳过 ${peer}`); return }
     }
 
     trace(`recv ${kind} ${target} ${name}：${text.slice(0, 120)}`)
+
+    // 先把这个会话的 agent 和场景上下文准备好，再决定要不要在正文里补摘要
+    transcript.markPending(peer, messageId)
+    let prep = null
+    try {
+      prep = await bridge.prepare(peer)
+    } catch (err) {
+      trace(`prepare failed ${peer}: ${err?.message || err}`)
+    }
+    const preface = prep?.scene
+      ? ''
+      : transcript.digest(peer, { limit: 6, maxChars: 400, title: kind === 'group' ? '群聊' : '私聊' })
 
     let content = prompt || text
     if (preface) content = `${preface}\n\n${content}`
@@ -294,11 +299,14 @@ export function apply(ctx, config) {
     await setTyping(kind, target, true)
     let result
     try {
-      result = await bridge.ask(peer, content)
+      result = await bridge.ask(peer, content, prep)
     } catch (err) {
       trace(`ask failed ${peer}: ${err?.stack || err?.message || err}`)
       await setTyping(kind, target, false)
+      transcript.clearPending(peer)
       return
+    } finally {
+      transcript.clearPending(peer)
     }
     await setTyping(kind, target, false)
 
@@ -321,6 +329,7 @@ export function apply(ctx, config) {
       if (i) await sleep(600 + Math.random() * 1000)
       try {
         await sender.sendText({ kind, target, text: chunks[i] })
+        transcript.record(peer, { fromSelf: true, name: '我', text: chunks[i] })
       } catch (err) {
         trace(`send failed ${peer}: ${err?.message || err}`)
         break

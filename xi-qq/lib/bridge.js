@@ -19,7 +19,7 @@ function textOf(event) {
     .trim()
 }
 
-export function createBridge({ getService, getSettings, trace }) {
+export function createBridge({ getService, getSettings, trace, scenes }) {
   const sessions = readJson(SESSIONS_PATH, {})
   let dirty = false
   let flushTimer = null
@@ -84,19 +84,29 @@ export function createBridge({ getService, getSettings, trace }) {
   const policySet = new Set()
 
   /** QQ 会话不该卡在审批上：默认把该 agent 的策略钉成 never（工具直接被拒，不等人）。 */
-  async function ensurePolicy(sessionId) {
+  async function ensurePolicy(sessionId, agent) {
     const approval = getService('approval')
     if (!approval?.setPolicy || policySet.has(sessionId)) return
     const wanted = getSettings().approvalPolicy || 'never'
     try {
-      const resolved = await service().resolveAgent(sessionId)
-      if (resolved?.agent) {
-        approval.setPolicy(resolved.agent, wanted)
+      if (agent) {
+        approval.setPolicy(agent, wanted)
         policySet.add(sessionId)
         trace(`approval: ${sessionId} -> ${wanted}`)
       }
     } catch (err) {
       trace(`approval set failed ${sessionId}: ${err.message}`)
+    }
+  }
+
+  /** 拿到这个会话的 agent（活着就直接返回，没活就恢复），用来挂场景上下文和审批策略。 */
+  async function agentOf(sessionId) {
+    try {
+      const resolved = await service().resolveAgent(sessionId)
+      return resolved?.agent || null
+    } catch (err) {
+      trace(`resolveAgent failed ${sessionId}: ${err.message}`)
+      return null
     }
   }
 
@@ -120,15 +130,37 @@ export function createBridge({ getService, getSettings, trace }) {
   }
 
   /**
-   * @returns {Promise<{text: string, kind: string, error?: Error}>}
+   * 备好一轮：拿到会话、钉住审批策略、把群聊近况挂上去。
+   * 场景挂上了，调用方就不用再往正文里塞摘要。
+   * @returns {Promise<{sessionId: string, scene: boolean}>}
    */
-  async function ask(peer, text) {
+  async function prepare(peer) {
+    const sessionId = await ensureSession(peer)
+    const agent = await agentOf(sessionId)
+    if (agent) await ensurePolicy(sessionId, agent)
+    let scene = false
+    try {
+      scene = agent ? !!scenes?.attach(agent, peer) : false
+    } catch (err) {
+      trace(`scene failed ${sessionId}: ${err.message}`)
+    }
+    return { sessionId, scene }
+  }
+
+  /**
+   * @param {string} peer
+   * @param {string} text
+   * @param {{sessionId: string, scene: boolean}} [prepared] 已经 prepare 过就传进来，省一次 resolve
+   * @returns {Promise<{text: string, kind: string, scene: boolean, error?: Error}>}
+   */
+  async function ask(peer, text, prepared) {
     const sc = service()
     const settings = getSettings()
-    const sessionId = await ensureSession(peer)
-    await ensurePolicy(sessionId)
+    const ready = prepared || await prepare(peer)
+    const sessionId = ready.sessionId
+    const scene = !!ready.scene
     const baseline = await lastSeq(sc, sessionId)
-    trace(`bridge: prompt ${peer} session=${sessionId} base=${baseline} text=${JSON.stringify(text.slice(0, 80))}`)
+    trace(`bridge: prompt ${peer} session=${sessionId} base=${baseline} scene=${scene} text=${JSON.stringify(text.slice(0, 80))}`)
 
     const controller = new AbortController()
     const abortTimer = setTimeout(() => controller.abort(), settings.timeoutMs)
@@ -161,13 +193,13 @@ export function createBridge({ getService, getSettings, trace }) {
       const reason = end?.data?.reason
       const kind = reason?.kind || 'completed'
       if (kind === 'error') {
-        return { text: reply, kind, error: new Error(reason?.error?.message || '模型报错') }
+        return { text: reply, kind, scene, error: new Error(reason?.error?.message || '模型报错') }
       }
-      return { text: reply, kind }
+      return { text: reply, kind, scene }
     }
     // 超时就把这一轮掐掉：否则它会一直挂着，后面的消息全排队等死
     await cancelSession(sessionId)
-    return { text: '', kind: 'timeout', error: new Error(`等回复超时（${Math.round(settings.timeoutMs / 1000)}s）`) }
+    return { text: '', kind: 'timeout', scene, error: new Error(`等回复超时（${Math.round(settings.timeoutMs / 1000)}s）`) }
   }
-  return { ask, ensureSession, forget, markStyled, cancelSession, unstickAll, known: sessions }
+  return { ask, prepare, ensureSession, forget, markStyled, cancelSession, unstickAll, known: sessions }
 }

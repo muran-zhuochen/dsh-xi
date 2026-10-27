@@ -72,6 +72,9 @@ export const DEFAULTS = {
   // 说话方式：分条、正在输入、开头那句风格说明（styleNoteText 留空用内置文案）
   chat: { chunkReply: true, maxChunks: 3, typing: true, styleNote: true, styleNoteText: '' },
 
+  // 群聊近况：她开口时把最近几条一起挂进提示词（不额外跑模型，只多这几行字）
+  scene: { enabled: true, maxMessages: 20, maxChars: 800 },
+
   // QQ 会话的审批策略：never = 不等人，工具直接拒（否则会卡死在审批上）
   approvalPolicy: 'never',
   // 插件启动时把已知会话里挂住的回合清掉

@@ -1,6 +1,6 @@
 // 假 NapCat：一个只会说一句、并打印所有 action 的 OneBot 11 WS 服务端。
 // 用来在没有真协议端时验证「收消息 → 进会话 → 回消息」整条链。
-// 用法：node tools/fake-napcat.mjs [port] ["要发的话"]
+// 用法：node tools/fake-napcat.mjs [port] ["要发的话"] [发信人QQ号]
 import { createRequire } from 'node:module'
 
 const require = createRequire('C:/Users/MRZC/.dsh/profiles/desktop/package.json')
@@ -9,7 +9,7 @@ const { WebSocketServer } = require('ws')
 const port = Number(process.argv[2] || 3999)
 const incoming = process.argv[3] || '你好，我在测 QQ 通道，随便回我一句短的就行。'
 const selfId = 10001
-const userId = 20002
+const userId = Number(process.argv[4] || 20002)
 
 const wss = new WebSocketServer({ port })
 console.log(`fake-napcat: ws://127.0.0.1:${port}`)
