@@ -114,10 +114,11 @@ ${address}。
 
 export function renderMemory(input = {}) {
   const address = (input.address || '').trim() || '你'
-  return `# 关于${address}（短期事实）
+  return `# 关于${address}（常驻事实）
 
 格式：\`- 日期 [权重1~3] 内容 · 用 YYYY-MM-DD\`
-规则：上限 20 条，权重 1 满 30 天退档、2 满 90 天；退下去的不删，搬进 \`archive/facts/\`。
+分层：常驻（这里，上限 20 条）/ \`永久记忆/\` 长期不常驻 / \`珍贵的记忆/\` 只进不出 / \`短期记忆/\` 最近 30 天 / \`遗忘的记忆/\` 淡出的。
+一条记忆只住一处；退下去的不删，再提到就搬回来。
 
 ## 事实
 
@@ -152,8 +153,13 @@ export function initPersona(personaDir, dataDir = personaDir, input = {}) {
 
   fs.mkdirSync(personaDir, { recursive: true })
   fs.mkdirSync(dataDir, { recursive: true })
-  fs.mkdirSync(path.join(dataDir, 'diary'), { recursive: true })
-  fs.mkdirSync(path.join(dataDir, 'archive', 'facts'), { recursive: true })
+  fs.mkdirSync(path.join(dataDir, '短期记忆', '日记'), { recursive: true })
+  fs.mkdirSync(path.join(dataDir, '短期记忆', '对话'), { recursive: true })
+  fs.mkdirSync(path.join(dataDir, '永久记忆'), { recursive: true })
+  fs.mkdirSync(path.join(dataDir, '珍贵的记忆'), { recursive: true })
+  fs.mkdirSync(path.join(dataDir, '遗忘的记忆', '事实'), { recursive: true })
+  fs.mkdirSync(path.join(dataDir, '遗忘的记忆', '日记'), { recursive: true })
+  fs.mkdirSync(path.join(dataDir, '遗忘的记忆', '对话'), { recursive: true })
 
   const created = []
   const write = (base, file, content) => {
@@ -165,7 +171,7 @@ export function initPersona(personaDir, dataDir = personaDir, input = {}) {
   write(personaDir, 'SOUL.md', renderSoul(input))
   write(dataDir, 'MEMORY.md', renderMemory(input))
   write(dataDir, 'MOOD.md', renderMood())
-  write(dataDir, path.join('diary', `${new Date().toISOString().slice(0, 10)}.md`),
+  write(dataDir, path.join('短期记忆', '日记', `${new Date().toISOString().slice(0, 10)}.md`),
     `# ${new Date().toISOString().slice(0, 10)}\n\n第一天。被装好了。\n`)
 
   return { ok: true, created }

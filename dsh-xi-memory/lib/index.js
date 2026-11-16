@@ -31,9 +31,28 @@ const text = (value) => [{ type: 'text', text: value }]
 function resolveConfig(config) {
   const merged = { ...DEFAULTS, ...(config || {}) }
   merged.memoryDir = String(merged.memoryDir)
-  merged.archiveDir = path.join(merged.memoryDir, 'archive', 'conversations')
-  merged.diaryDir = path.join(merged.memoryDir, 'diary')
+  merged.archiveDir = path.join(merged.memoryDir, '短期记忆', '对话')
+  merged.diaryDir = path.join(merged.memoryDir, '短期记忆', '日记')
+  merged.forgotDir = path.join(merged.memoryDir, '遗忘的记忆')
+  merged.forgotChatDir = path.join(merged.forgotDir, '对话')
+  merged.forgotDiaryDir = path.join(merged.forgotDir, '日记')
+  merged.forgotFactsDir = path.join(merged.forgotDir, '事实')
+  merged.permanentDir = path.join(merged.memoryDir, '永久记忆')
+  merged.preciousDir = path.join(merged.memoryDir, '珍贵的记忆')
   return merged
+}
+
+/** 检索的七个来源：五区全覆盖，kind 用来收窄。 */
+function memorySources(config) {
+  return [
+    { dir: config.archiveDir, base: '短期记忆/对话', day: true, isDiary: false, who: '对话', kinds: ['conversation'] },
+    { dir: config.diaryDir, base: '短期记忆/日记', day: true, isDiary: true, who: '日记', kinds: ['diary'] },
+    { dir: config.forgotChatDir, base: '遗忘的记忆/对话', day: true, isDiary: false, who: '对话', kinds: ['conversation', 'forgotten'] },
+    { dir: config.forgotDiaryDir, base: '遗忘的记忆/日记', day: true, isDiary: true, who: '日记', kinds: ['diary', 'forgotten'] },
+    { dir: config.forgotFactsDir, base: '遗忘的记忆/事实', day: false, isDiary: true, who: '记忆', kinds: ['forgotten'] },
+    { dir: config.permanentDir, base: '永久记忆', day: false, isDiary: true, who: '记忆', kinds: ['permanent'] },
+    { dir: config.preciousDir, base: '珍贵的记忆', day: false, isDiary: true, who: '记忆', kinds: ['precious'] },
+  ]
 }
 
 function messageText(event) {
@@ -92,12 +111,12 @@ export function apply(ctx, rawConfig) {
   // 3. 两个检索工具
   const findTool = {
     name: 'memory_find',
-    description: '在汐自己的记忆里按字面找旧话：聊天归档（archive/conversations）和日记（diary）。一次只回几条摘要，要更多翻页或读原文。',
+    description: '在汐自己的记忆里按字面找旧话：短期记忆（对话、日记）、遗忘的记忆、永久记忆、珍贵的记忆。一次只回几条摘要，要更多翻页或读原文。',
     parameters: {
       type: 'object',
       properties: {
         query: { type: 'string', description: '原话里的一小段字面文字，区分大小写；不是 SQL 或搜索语法。' },
-        kind: { type: 'string', enum: ['conversation', 'diary'], description: '只找聊天，或只找日记；不填就两边都找。' },
+        kind: { type: 'string', enum: ['conversation', 'diary', 'permanent', 'precious', 'forgotten'], description: '只找某一区：对话 / 日记 / 永久 / 珍贵 / 遗忘；不填就全找。' },
         from: { type: 'string', description: '起始日期 YYYY-MM-DD，含当天。' },
         to: { type: 'string', description: '结束日期 YYYY-MM-DD，含当天。' },
         limit: { type: 'integer', description: '这一页返回几条，默认 8，最多 50。' },
@@ -129,7 +148,7 @@ export function apply(ctx, rawConfig) {
       },
       render: (_args, value) => {
         if (value.items.length === 0) return text('没找到。可能没聊过，也可能用了别的说法；换个词或放宽日期再试。')
-        const lines = value.items.map((it) => `- ${it.time} · ${it.who} · ${it.ref}\n  ${it.text}`)
+        const lines = value.items.map((it) => `- ${[it.time, it.who, it.ref].filter(Boolean).join(' · ')}\n  ${it.text}`)
         const tail = value.nextCursor === undefined ? '' : `\n\n还有更多，用 cursor=${value.nextCursor} 翻下一页。`
         return text(`找到 ${value.items.length} 条（扫了 ${value.files} 个文件）：\n${lines.join('\n')}${tail}`)
       },
@@ -137,7 +156,7 @@ export function apply(ctx, rawConfig) {
     execute: async (args) => {
       const limit = Math.max(1, Math.min(50, Number(args.limit) || 8))
       return searchArchive({
-        dirs: { conversations: config.archiveDir, diary: config.diaryDir },
+        sources: memorySources(config),
         query: args.query,
         kind: args.kind,
         from: args.from,
@@ -154,7 +173,7 @@ export function apply(ctx, rawConfig) {
     parameters: {
       type: 'object',
       properties: {
-        ref: { type: 'string', description: 'memory_find 返回的 ref，形如 diary/2026-10-27.md:12。' },
+        ref: { type: 'string', description: 'memory_find 返回的 ref，形如 短期记忆/日记/2026-10-27.md:12。' },
         offset: { type: 'integer', description: '从这个 ref 起跳过几个字符，默认 0。' },
         limit: { type: 'integer', description: '这一页最多几个字符，默认 2000，最多 16000。' },
       },
@@ -237,7 +256,7 @@ export function apply(ctx, rawConfig) {
     const params = urlOf(request).searchParams
     const query = params.get('q') || ''
     const result = searchArchive({
-      dirs: { conversations: config.archiveDir, diary: config.diaryDir },
+      sources: memorySources(config),
       query,
       kind: params.get('kind') || undefined,
       from: params.get('from') || undefined,

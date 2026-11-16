@@ -1,5 +1,5 @@
 /**
- * 把 DSH 已有的会话日志回填进 汐/记忆/archive/conversations。
+ * 把 DSH 已有的会话日志回填进 汐/记忆/短期记忆/对话。
  * 用法：node scripts/backfill.mjs [sessionsRoot] [memoryDir]
  *
  * 日志是 session.v4.jsonl.zstd：多个 zstd 帧首尾相接，按魔数切开逐帧解压。
@@ -14,7 +14,7 @@ import { appendMessage, loadSeen, saveSeen } from '../lib/store.js'
 const MAGIC = Buffer.from([0x28, 0xb5, 0x2f, 0xfd])
 const sessionsRoot = path.resolve(process.argv[2] || path.join(os.homedir(), '.dsh', 'sessions'))
 const memoryDir = path.resolve(process.argv[3] || 'E:/Ai-Agent/汐/记忆')
-const archiveDir = path.join(memoryDir, 'archive', 'conversations')
+const archiveDir = path.join(memoryDir, '短期记忆', '对话')
 const timeZone = 'Asia/Shanghai'
 
 function decode(file) {

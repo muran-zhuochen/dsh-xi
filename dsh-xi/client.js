@@ -194,8 +194,8 @@ window.__ModuleLoader__.load({
             h('div', { className: 'xi-bar' }, h('i', { style: { width: pct + '%' } }))),
           h('div', { className: 'xi-card' },
             h('h4', null, '记忆'),
-            h('div', { className: 'xi-big' }, String(s.memory.length), h('span', { className: 'xi-dim' }, ' 条短期')),
-            h('div', { className: 'xi-dim' }, '冷藏 ' + s.archive.total + ' 条 · 影响 ' + s.archive.influence.length + ' 条'),
+            h('div', { className: 'xi-big' }, String(s.memory.length), h('span', { className: 'xi-dim' }, ' 条常驻')),
+            h('div', { className: 'xi-dim' }, '永久 ' + (s.archive.permanent || 0) + ' · 珍贵 ' + (s.archive.precious || 0) + ' · 遗忘 ' + s.archive.total),
             h('div', { className: 'xi-dim', style: { marginTop: 8 } }, '日记 ' + (s.diary.date || '—'))),
           h('div', { className: 'xi-card' },
             h('h4', null, '接入'),
@@ -230,11 +230,11 @@ window.__ModuleLoader__.load({
                 h('td', { className: 'xi-dim' }, r.used)))))))
       return h('div', null,
         s.memory.length ? sections : h('div', { className: 'xi-empty' }, '还没有短期事实'),
-        h('div', { className: 'xi-sect' }, '冷藏区 · archive/'),
+        h('div', { className: 'xi-sect' }, '其他区 · 永久 / 珍贵 / 遗忘'),
         h('div', { className: 'xi-card' },
-          h('div', { className: 'xi-muted' }, cats),
+          h('div', { className: 'xi-muted' }, '永久 ' + (s.archive.permanent || 0) + ' 条 · 珍贵 ' + (s.archive.precious || 0) + ' 篇 · 遗忘 ' + cats),
           h('div', { className: 'xi-note' },
-            '权重 1 满 30 天、2 满 90 天退到这里，原文保留；180 天没被提起才彻底遗忘，只留一句影响。再提到就搬回来，权重 +1。')),
+            '短期满 30 天整文件搬进遗忘；常驻退下来进永久或遗忘。彻底忘掉按权重（永/半/淡）：关系与经历默认半，工作默认淡。再提到先回短期、标模糊，权重 +1。')),
         s.archive.influence.length
           ? h('div', null,
               h('div', { className: 'xi-sect' }, '影响 · 已遗忘但留下痕迹'),
@@ -429,7 +429,7 @@ window.__ModuleLoader__.load({
         padding: '6px 9px', borderRadius: 8, border: '1px solid var(--xi-line)',
         background: 'transparent', color: 'inherit', font: 'inherit', fontSize: 12.5,
       }
-      const kinds = [['', '全部'], ['conversation', '聊天'], ['diary', '日记']]
+      const kinds = [['', '全部'], ['conversation', '对话'], ['diary', '日记'], ['permanent', '永久'], ['precious', '珍贵'], ['forgotten', '遗忘']]
       const total = ov ? ov.days.reduce((n, d) => n + d.entries, 0) : 0
       const last = ov && ov.days.length > 0 ? Math.max.apply(null, ov.days.map((d) => d.mtime)) : 0
       return h('div', null,

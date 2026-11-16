@@ -36,6 +36,20 @@ export function listDayFiles(dir) {
   try { return fs.readdirSync(dir).filter((f) => DAY_RE.test(f)).sort() } catch { return [] }
 }
 
+/** 分类文件（永久记忆 / 珍贵的记忆 / 遗忘的事实）：不是按天命名，排掉说明文件。 */
+export function listTextFiles(dir) {
+  try {
+    return fs.readdirSync(dir)
+      .filter((f) => f.endsWith('.md') && !f.startsWith('.') && f !== 'README.md' && f !== '索引.md')
+      .sort()
+  } catch { return [] }
+}
+
+function dayOfLine(line) {
+  const m = /^-\s+(\d{4}-\d{2}-\d{2})/.exec(line)
+  return m ? m[1] : ''
+}
+
 /** 追加一条对话；返回写入的文件。已有的日子不重写表头。 */
 export function appendMessage({ dir, timeZone, time, sessionId, who, text }) {
   const day = dayOf(time, timeZone)
@@ -98,23 +112,25 @@ function timeOf(line, day, isDiary) {
 }
 
 /**
- * 按字面在聊天归档与日记里找，返回最新的在前。
+ * 按字面在记忆的各个区里找，返回最新的在前。
+ * sources: [{dir, base, day, isDiary, who, kinds}]，kind 缺省 = 全部区。
  * @returns {{items: Array<{ref: string, time: string, who: string, text: string}>, nextCursor?: number, files: number}}
  */
-export function searchArchive({ dirs, query, kind, from, to, order = 'newest', limit = 8, cursor = 0 }) {
+export function searchArchive({ sources, query, kind, from, to, order = 'newest', limit = 8, cursor = 0 }) {
   const needle = String(query ?? '').trim()
   if (needle === '') return { items: [], files: 0 }
-  const sources = []
-  if (kind !== 'diary' && dirs.conversations) sources.push({ dir: dirs.conversations, isDiary: false, base: 'archive/conversations' })
-  if (kind !== 'conversation' && dirs.diary) sources.push({ dir: dirs.diary, isDiary: true, base: 'diary' })
 
   const matches = []
   let scanned = 0
-  for (const source of sources) {
-    const files = listDayFiles(source.dir).filter((f) => {
-      const day = f.slice(0, 10)
-      return (!from || day >= from) && (!to || day <= to)
-    }).sort().reverse()
+  for (const source of sources || []) {
+    if (!source || !source.dir) continue
+    if (kind && Array.isArray(source.kinds) && !source.kinds.includes(kind)) continue
+    const files = source.day
+      ? listDayFiles(source.dir).filter((f) => {
+        const day = f.slice(0, 10)
+        return (!from || day >= from) && (!to || day <= to)
+      }).sort().reverse()
+      : listTextFiles(source.dir)
     for (const f of files) {
       scanned += 1
       const day = f.slice(0, 10)
@@ -125,9 +141,9 @@ export function searchArchive({ dirs, query, kind, from, to, order = 'newest', l
         if (!line.toLowerCase().includes(needle.toLowerCase())) continue
         matches.push({
           ref: `${source.base}/${f}:${i + 1}`,
-          time: timeOf(line, day, source.isDiary),
-          who: whoOf(line, source.isDiary),
-          text: excerpt(stripPrefix(line, source.isDiary), needle),
+          time: source.day ? timeOf(line, day, source.isDiary) : dayOfLine(line),
+          who: source.who || (source.isDiary ? '日记' : '记录'),
+          text: excerpt(source.day ? stripPrefix(line, source.isDiary) : line.replace(/^-\s+/, ''), needle),
         })
         if (matches.length >= MAX_SCAN_MATCHES) break
       }
@@ -170,14 +186,15 @@ export function readRefText({ memoryDir, ref, offset = 0, limit = 2000 }) {
 
 let cache = { key: '', text: '' }
 
-/** 常驻记忆块：事实 + 心情，附一句怎么翻旧话。内容没变就不重建。 */
+const mtimeOf = (file) => { try { return fs.statSync(file).mtimeMs } catch { return 0 } }
+
+/** 常驻记忆块：事实 + 心情 + 珍贵标题，附一句怎么翻旧话。内容没变就不重建。 */
 export function renderMemoryBlock(memoryDir, maxChars = 4500) {
   const factsFile = path.join(memoryDir, 'MEMORY.md')
   const moodFile = path.join(memoryDir, 'MOOD.md')
-  let stamp = ''
-  try {
-    stamp = `${fs.statSync(factsFile).mtimeMs}:${fs.statSync(moodFile).mtimeMs}:${maxChars}`
-  } catch { return '' }
+  const preciousIndex = path.join(memoryDir, '珍贵的记忆', '索引.md')
+  if (mtimeOf(factsFile) === 0 && mtimeOf(moodFile) === 0) return ''
+  const stamp = `${mtimeOf(factsFile)}:${mtimeOf(moodFile)}:${mtimeOf(preciousIndex)}:${maxChars}`
   if (cache.key === stamp) return cache.text
 
   const factsRaw = readText(factsFile)
@@ -189,10 +206,15 @@ export function renderMemoryBlock(memoryDir, maxChars = 4500) {
     .split(/\r?\n/)
     .filter((l) => l.startsWith('- 状态') || l.startsWith('- 原因') || l.startsWith('- 到期'))
     .join('\n')
+  const precious = readText(preciousIndex)
+    .split(/\r?\n/)
+    .filter((l) => l.startsWith('- '))
+    .join('\n')
 
   const parts = ['## 记忆（常驻，由插件自动注入）', '下面是汐自己的记忆文件，已经在这里，不必再去读一遍。']
   if (facts) parts.push('<事实>\n' + facts.slice(0, maxChars) + (facts.length > maxChars ? '\n…（截断）' : ''))
   if (mood) parts.push('<此刻心情>\n' + mood)
+  if (precious) parts.push('<珍贵的记忆（只有标题，要读再翻正文）>\n' + precious)
   parts.push('要翻旧话：memory_find(query=原话里的一小段)，再 memory_read(ref)。不要把所有历史一次塞进上下文。')
 
   const text = parts.join('\n\n')

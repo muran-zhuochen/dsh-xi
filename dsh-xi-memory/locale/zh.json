@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "汐的记忆",
-    "description": "把每次对话按天归档进 汐/记忆，开场注入常驻事实与心情，并提供 memory_find / memory_read 两个按原话翻旧事的工具。不调模型，不跑定时任务。"
+    "description": "把每次对话按天归档进 汐/记忆，开场注入常驻事实、心情与珍贵标题，并提供 memory_find / memory_read 两个按原话翻旧事的工具。不调模型，不跑定时任务。"
   }
 }

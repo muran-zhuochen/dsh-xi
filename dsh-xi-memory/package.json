@@ -1,6 +1,6 @@
 {
   "name": "dsh-xi-memory",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "汐 · 记忆：归档对话、memory_find / memory_read、开场注入；归档页并进汐控制台的「归档」标签",
   "license": "MIT",

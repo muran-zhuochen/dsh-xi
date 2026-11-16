@@ -30,15 +30,15 @@ const MIGRATIONS = [
   },
   {
     version: '0.4.0',
-    describe: 'QQ 通道接入（开关与自启动由控制台管，配置在 ~/.dsh/xi-qq）',
+    describe: '（已废弃）QQ 通道接入，2026-11-16 整条删除',
     run(state) {
-      state.channels ||= {}
-      state.channels.qq = { via: 'dsh-xi-qq' }
+      // 保留这条迁移只为了让老数据继续往后跑；不再往 state 里塞 channels。
+      delete state.channels
     },
   },
 ]
 
-export const PLUGIN_VERSION = '0.7.1'
+export const PLUGIN_VERSION = '0.8.0'
 
 export function runMigrations(log = () => {}, dataDir) {
   if (!dataDir) return { version: '0.0.0', migrations: {} }

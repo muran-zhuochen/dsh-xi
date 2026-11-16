@@ -3,7 +3,6 @@ import path from 'node:path'
 import os from 'node:os'
 import { hasPersona } from './persona.js'
 import { PLUGIN_VERSION } from './upgrade.js'
-import { readQqSettings, QQ_STATUS, QQ_REJECTED } from './qqconfig.js'
 
 const HOME = process.env.USERPROFILE || os.homedir()
 export const DSH_HOME = process.env.DSH_HOME || path.join(HOME, '.dsh')
@@ -55,14 +54,14 @@ function parseMemory(dir) {
   for (const line of raw.split(/\r?\n/)) {
     const h = line.match(/^##\s+(.+)$/)
     if (h) { section = h[1].trim(); continue }
-    const m = line.match(/^-\s+(\d{4}-\d{2}-\d{2})\s+\[(\d)\]\s+(.*?)(?:\s*·\s*用\s*(\d{4}-\d{2}-\d{2}))?\s*$/)
+    const m = line.match(/^-\s+(\d{4}-\d{2}-\d{2})\s+\[(\d)(?:·[^\]]*)?\]\s+(.*?)(?:\s*·\s*用\s*(\d{4}-\d{2}-\d{2}))?\s*$/)
     if (m) facts.push({ section, date: m[1], weight: Number(m[2]), text: m[3], used: m[4] || m[1] })
   }
   return facts
 }
 
 function latestDiary(dir) {
-  const d = path.join(dir, 'diary')
+  const d = path.join(dir, '短期记忆', '日记')
   if (!stat(d)) return { date: '', content: '' }
   const files = fs.readdirSync(d).filter((f) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f)).sort()
   if (!files.length) return { date: '', content: '' }
@@ -71,7 +70,7 @@ function latestDiary(dir) {
 }
 
 function parseArchive(dir) {
-  const factsDir = path.join(dir, 'archive', 'facts')
+  const factsDir = path.join(dir, '遗忘的记忆', '事实')
   const facts = {}
   let total = 0
   if (stat(factsDir)) {
@@ -82,10 +81,24 @@ function parseArchive(dir) {
       total += n
     }
   }
-  const inf = read(path.join(dir, 'archive', 'influence.md')) || ''
+  const inf = read(path.join(dir, '遗忘的记忆', '影响.md')) || ''
+  const permanentDir = path.join(dir, '永久记忆')
+  let permanent = 0
+  if (stat(permanentDir)) {
+    for (const f of fs.readdirSync(permanentDir).filter((x) => x.endsWith('.md') && x !== 'README.md')) {
+      const txt = read(path.join(permanentDir, f)) || ''
+      permanent += txt.split(/\r?\n/).filter((l) => /^-\s+\d{4}-\d{2}-\d{2}/.test(l)).length
+    }
+  }
+  const preciousDir = path.join(dir, '珍贵的记忆')
+  const precious = stat(preciousDir)
+    ? fs.readdirSync(preciousDir).filter((x) => x.endsWith('.md') && x !== 'README.md' && x !== '索引.md').length
+    : 0
   return {
     facts,
     total,
+    permanent,
+    precious,
     influence: inf.split(/\r?\n/).filter((l) => /^-\s+\d{4}-\d{2}-\d{2}/.test(l)),
   }
 }
@@ -125,57 +138,6 @@ function parseExtensions(root) {
   return out
 }
 
-/** 白名单外来找过的人/群（dsh-xi-qq 写的 rejected.json），给界面做「一键加进来」。 */
-function parseRejected() {
-  const raw = read(QQ_REJECTED)
-  if (!raw) return []
-  try {
-    const obj = JSON.parse(raw) || {}
-    return Object.values(obj)
-      .filter((x) => x && (x.kind === 'private' || x.kind === 'group') && x.id)
-      .sort((a, b) => (Number(b.at) || 0) - (Number(a.at) || 0))
-      .slice(0, 12)
-      .map((x) => ({
-        kind: x.kind,
-        id: String(x.id),
-        name: String(x.name || ''),
-        at: Number(x.at) || 0,
-        count: Number(x.count) || 1,
-      }))
-  } catch { return [] }
-}
-
-/** 通道运行态：来自 dsh-xi-qq 写的 status.json 与共享的 settings.json。 */
-function parseChannels() {
-  const settings = readQqSettings()
-  const status = (() => {
-    try { return JSON.parse(read(QQ_STATUS) || '{}') || {} } catch { return {} }
-  })()
-  return {
-    qq: {
-      enabled: settings.enabled !== false,
-      autostart: !!settings.autostartNapCat,
-      connected: !!status.connected,
-      napcat: !!status.napcatUp,
-      selfId: status.selfId || settings.selfId || '',
-      version: status.version || '',
-      peers: Number(status.peers) || 0,
-      at: status.at || '',
-      daily: status.daily || null,
-      // 白名单：只有名单里的群 / 私聊会回话
-      groups: settings.groups || [],
-      allowUsers: settings.allowUsers || [],
-      rejected: parseRejected(),
-      policy: {
-        privateChat: settings.privateChat,
-        groupPolicy: settings.groupPolicy,
-        limits: settings.limits,
-        chat: settings.chat,
-      },
-    },
-  }
-}
-
 export function buildState(root = process.cwd(), dir = resolveDataDir(), personaDir = dir) {
   return {
     updatedAt: new Date().toISOString(),
@@ -190,7 +152,6 @@ export function buildState(root = process.cwd(), dir = resolveDataDir(), persona
     archive: parseArchive(dir),
     cost: parseCost(),
     extensions: parseExtensions(root),
-    channels: parseChannels(),
     budget: { line: 1, tightLine: 0.3, tightBalance: 2 },
   }
 }
