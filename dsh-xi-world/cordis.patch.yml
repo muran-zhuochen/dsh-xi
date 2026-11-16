@@ -1,0 +1,6 @@
+# Bundle patch layer: 汐的世界。宿主半侧只提供一个只读接口，把页面和 JSON 一起交出去。
+- insert:
+    - id: dsh-xi-world
+      name: dsh-xi-world
+      config:
+        memoryDir: E:/Ai-Agent/汐/汐的世界
