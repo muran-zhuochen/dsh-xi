@@ -1,26 +1,31 @@
 # 汐 · dsh-xi
 
-给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 做的一个陪伴型伴侣：一个控制台面板，加一条 QQ 通道。
+给 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 做的一个陪伴型伴侣：一个控制台面板。
 
 不是聊天机器人框架，是「一个具体的人」的实现：她有自己的名字、脾气、记忆和遗忘规则，代码只负责让这些东西能跑起来。
 
 ```
-QQ ←→ NapCat(OneBot 11) ←→ dsh-xi-qq ←→ DSH 会话 ←→ 汐
-                              ↑
-                         dsh-xi（控制台，管开关与频率）
+DSH 会话 ←→ 汐（人格 / 记忆 / 心情在 人格\ 和 记忆\）
+   ↑
+dsh-xi（控制台：总览 / 记忆 / 心情 / 成本 / 接入 / 形象·语音 / 性格）
 ```
 
-## 两个包
+## 一个包
 
 | 目录 | 包名 | 作用 |
 | --- | --- | --- |
-| `dsh-xi/` | `dsh-xi` | 控制台插件。左侧边栏「汐」入口，七个面板：总览、记忆、心情、成本、接入、形象·语音、性格。接入页里有 QQ 通道的状态、开关和聊天频率。 |
-| `xi-qq/` | `dsh-xi-qq` | QQ 桥（宿主侧，无界面）。连 NapCat 的 OneBot 11 WebSocket，QQ 消息进 DSH 会话，回复回 QQ。 |
+| `dsh-xi/` | `dsh-xi` | 控制台插件。左侧边栏「汐」入口，只读展示人格、记忆、心情、花费。 |
 
-两个包互相独立，但 QQ 通道要两个都装：`dsh-xi-qq` 负责收发，`dsh-xi` 负责画界面和管开关。
+仓库根同时就是运行目录：DSH 加载的 `dsh-xi/` 就是这里的文件，没有第二份副本。
+改代码、回退、重启，动的是同一堆文件。运行时日志（`日志/`）在 `.gitignore` 里，不进仓库。
 
-仓库根同时就是运行目录：DSH 加载的 `dsh-xi/`、`xi-qq/` 就是这里的文件，没有第二份副本。
-改代码、回退、重启，动的是同一堆文件。运行时数据（`qq/`、`日志/`）在 `.gitignore` 里，不进仓库。
+## QQ 通道已移除（2026-11-16）
+
+这里原来还有一个 `xi-qq/` 包：OneBot 11 桥 + NapCat，把 QQ 私聊/群聊接进 DSH 会话。
+
+**整个删了。** 理由是 NapCat 靠注入 QQ 客户端工作，违反平台协议，实测会触发 QQ 的文件校验、有封号风险；同设备同 IP 还会连坐，拿小号也保不住大号。现在不接任何第三方协议端，以后也不再接。
+
+删掉的东西：`xi-qq/` 代码、`dsh-xi-qq` 包和 profile 里的 bundle 条目、`~/.dsh/xi-qq/`（含 109MB 的 NapCat）、`dsh-xi` 里的三份 QQ 配置文件（`lib/qqlink.js`、`lib/qqconfig.js`、`extensions/qq/`），以及控制台「接入」页的 QQ 入口和次级页。
 
 ## 安装
 
@@ -28,78 +33,17 @@ QQ ←→ NapCat(OneBot 11) ←→ dsh-xi-qq ←→ DSH 会话 ←→ 汐
 # 1. 把仓库放进任意目录，然后以本地目录安装（DSH 的 plugin_manager 也支持）
 # 2. profile 的 package.json 里加依赖
 "dsh-xi": "link:../path/to/dsh-xi"
-"dsh-xi-qq": "link:../path/to/xi-qq"
 
-# 3. 在 profile 的 bundles 列表里加上两个包名，重启 DSH
+# 3. 在 profile 的 bundles 列表里加上包名，重启 DSH
 ```
 
-或者用 DSH 自带的 `plugin_manager install_bundle`，target 指向这两个目录。
+## 数据在哪
 
-### QQ 通道的额外依赖
-
-需要一个 OneBot 11 协议端。推荐 [NapCat](https://github.com/NapNeko/NapCatQQ)：
-
-1. 装 NapCat（framework 或 shell 版都行），扫码登录一个 QQ 号。
-2. 在 NapCat 的 WebUI 里开一个 **WebSocket 服务端**，端口 `3001`。
-3. `~/.dsh/xi-qq/settings.json` 里填 `wsUrl`（默认 `ws://127.0.0.1:3001`），再把要说话的群号填进 `groups`、要回的私聊 QQ 号填进 `allowUsers`；也可以装好控制台后在「接入 → QQ → 白名单」里点。
-
-没有协议端也能验：把 `~/.dsh/xi-qq/settings.json` 的 `selftest` 设成 `true`，重启后 `~/.dsh/xi-qq/qq.log` 里会出现一行 `selftest: kind=completed text="通道通了"`。
-
-## 配置
-
-全部在 `~/.dsh/xi-qq/settings.json`，改完不用重启（桥每 2 秒看一次文件 mtime）。
-
-```jsonc
-{
-  "wsUrl": "ws://127.0.0.1:3001",
-  "selfId": "",                  // 机器人 QQ 号；留空则用事件里的 self_id
-  "allowUsers": [],              // 私聊白名单；空 = 谁都不回（默认拒绝）
-  "groups": [],                  // 群白名单；空 = 群里不回
-
-  "privateChat": { "enabled": true, "minIntervalSec": 0, "maxPerHour": 0 },
-
-  "groupPolicy": {
-    "enabled": true,
-    "mention": { "enabled": true, "minIntervalSec": 15, "maxPerHour": 30 },
-    "ambient": {
-      "enabled": false,          // 没被 @ 也偶尔接话，默认关
-      "minIntervalSec": 600,
-      "maxPerHour": 3,
-      "chance": 0.5,
-      "keywords": ["汐", "她"]
-    }
-  },
-
-  "limits": { "dailyEnabled": true, "dailyReplies": 200 },
-  "chat": { "chunkReply": true, "maxChunks": 3, "typing": true, "styleNote": true }
-}
-```
-
-被限流的消息**不进模型**，只在 `qq.log` 留一行，所以这些闸门是真省钱。
-
-## 数据目录
-
-```
-~/.dsh/xi-qq/
-  settings.json    配置
-  sessions.json    对端 → DSH 会话 id 的映射（删掉就重开对话）
-  status.json      桥写给控制台看的运行态
-  transcripts/     白名单内每条消息的转录，一个对端一份
-  qq.log           日志，超过 1MB 轮转
-```
-
-记忆、心情、人设（`SOUL.md` / `MEMORY.md` / `MOOD.md`）**不在这个仓库里**——那些是私人的。仓库只放代码。
-
-## 已知限制
-
-- 只处理文字，图片/语音只留占位符。
-- 不做流式，等整轮跑完再发，中间靠「正在输入」撑着。
-- DSH 的会话接口只有「喂一条 → 跑一轮」，所以群里没触发她的消息**不会进模型**；但会落进转录，她下次开口时能看到最近 20 条（`scene.maxMessages`），更早的要翻 `~/.dsh/xi-qq/transcripts/`。
-- 第三方协议端有账号风险，用小号。
+记忆、心情、人设（`SOUL.md` / `MEMORY.md` / `MOOD.md`）**不在这个仓库里**——那些是私人的，在 `E:\Ai-Agent\汐\人格\` 和 `E:\Ai-Agent\汐\记忆\`。控制台读它们，只读，不改。
 
 ## 开发与回退
 
-- 一次功能一个 commit，重启验证过再提交；发版打 tag（`v0.7.1` 起）。
+- 一次功能一个 commit，重启验证过再提交；发版打 tag。
 - 拉取只要 `git pull --ff-only`，合不了就停，不用自动 merge。
 - 回退后要重启 DSH（`lib/` 是宿主加载，`client.js` 是页面加载），不是只刷页面。
 - 决策、目录约定、回退命令：`docs/决策记录.md`。

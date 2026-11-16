@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url'
 import { buildState, resolveDataDir, resolvePersonaDir, DSH_HOME } from './state.js'
 import { initPersona, hasPersona } from './persona.js'
 import { runMigrations, PLUGIN_VERSION } from './upgrade.js'
-import { qqSnapshot, patchQqSettings, readQqSettings, startNapCat, portOpen } from './qqlink.js'
 
 export const name = 'dsh-xi'
 
@@ -47,33 +46,6 @@ export function apply(ctx, config) {
     return json(result)
   }
 
-  // 通道控制：启用开关、自启动开关、手动点火 NapCat
-  const channelHandler = async (request) => {
-    const input = await readBody(request)
-    if ((input.id || 'qq') !== 'qq') return json({ ok: false, reason: 'unknown-channel' }, 404)
-
-    const patch = {}
-    if (typeof input.enabled === 'boolean') patch.enabled = input.enabled
-    if (typeof input.autostart === 'boolean') patch.autostartNapCat = input.autostart
-    if (input.patch && typeof input.patch === 'object' && !Array.isArray(input.patch)) {
-      Object.assign(patch, input.patch)
-    }
-    if (Object.keys(patch).length) {
-      const next = patchQqSettings(patch)
-      trace(`channel qq patch=${JSON.stringify(patch).slice(0, 200)} -> enabled=${next.enabled} autostart=${next.autostartNapCat}`)
-    }
-
-    if (input.action === 'start-napcat') {
-      const up = await portOpen()
-      if (!up) {
-        trace('channel qq: 手动启动 NapCat')
-        startNapCat(trace)
-        await sleep(2500)
-      }
-    }
-    return json({ ok: true, qq: await qqSnapshot() })
-  }
-
   let done = false
   const register = (c, label) => {
     if (done) return
@@ -87,7 +59,6 @@ export function apply(ctx, config) {
     const routes = [
       ['/api/dsh-xi/state', 'POST', stateHandler],
       ['/api/dsh-xi/init', 'POST', initHandler],
-      ['/api/dsh-xi/channel', 'POST', channelHandler],
     ]
     try {
       c.effect(() => {
@@ -126,8 +97,8 @@ export function apply(ctx, config) {
       const base = app?.getAdvertisedUrl?.() || ''
       const url = base && conn?.authenticatedUrl ? conn.authenticatedUrl(base) : ''
       if (!url) { trace('dsh-url: 拿不到'); return }
-      fs.mkdirSync(path.join(DSH_HOME, 'xi-qq'), { recursive: true })
-      fs.writeFileSync(path.join(DSH_HOME, 'xi-qq', 'dsh-url.txt'), url + '\n')
+      fs.mkdirSync(path.join(DSH_HOME, 'xi'), { recursive: true })
+      fs.writeFileSync(path.join(DSH_HOME, 'xi', 'dsh-url.txt'), url + '\n')
       trace('dsh-url: 已写入 dsh-url.txt')
     } catch (err) {
       trace('dsh-url failed: ' + err.message)
@@ -135,16 +106,7 @@ export function apply(ctx, config) {
   }
   const urlTimer = setTimeout(dumpAuthedUrl, 800)
 
-  // 自启动：开关打开时，DSH 起来就把 NapCat 拉起来；NapCat 掉了也顺手补一次
-  const ensureNapcat = async (why) => {
-    if (!readQqSettings().autostartNapCat) return
-    if (await portOpen()) return
-    trace(`autostart(${why}): NapCat 不在，点火`)
-    startNapCat(trace)
-  }
-  const bootTimer = setTimeout(() => { void ensureNapcat('boot') }, 3000)
-  const watchTimer = setInterval(() => { void ensureNapcat('watch') }, 300000)
   try {
-    ctx.effect(() => () => { clearTimeout(bootTimer); clearInterval(watchTimer); clearTimeout(urlTimer) }, 'dsh-xi: napcat autostart')
+    ctx.effect(() => () => { clearTimeout(urlTimer) }, 'dsh-xi: dsh-url dump')
   } catch { /* 老版本 cordis 没有 effect 时忽略 */ }
 }

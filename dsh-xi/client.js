@@ -180,7 +180,6 @@ window.__ModuleLoader__.load({
         : status === '高兴' ? 'xi-amber' : 'xi-accent'
       const pct = Math.min(100, (s.cost.today / 1) * 100)
       const channels = s.extensions.filter((x) => x.type === 'channel')
-      const qq = (s.channels && s.channels.qq) || null
       return h('div', null,
         h('div', { className: 'xi-grid' },
           h('div', { className: 'xi-card' },
@@ -200,15 +199,11 @@ window.__ModuleLoader__.load({
             h('div', { className: 'xi-dim', style: { marginTop: 8 } }, '日记 ' + (s.diary.date || '—'))),
           h('div', { className: 'xi-card' },
             h('h4', null, '接入'),
-            channels.map((x) => {
-              const live = x.id === 'qq' ? qq : null
-              const dot = live ? (live.connected ? 'ready' : (live.enabled ? 'planned' : '')) : x.status
-              const label = live ? (live.connected ? '已连接' : (live.enabled ? '待连' : '已关'))
-                : (x.status === 'ready' ? '已接' : '预留')
-              return h('span', { className: 'xi-chip', key: x.id },
-                h('i', { className: 'xi-dot ' + dot }), x.name + ' · ' + label)
-            }),
-            h('div', { className: 'xi-dim', style: { marginTop: 4 } }, '开关在「接入」页'))),
+            channels.length
+              ? channels.map((x) => h('span', { className: 'xi-chip', key: x.id },
+                  h('i', { className: 'xi-dot ' + (x.status === 'ready' ? 'ready' : '') }), x.name))
+              : h('div', { className: 'xi-dim' }, '无外部通道'),
+            h('div', { className: 'xi-dim', style: { marginTop: 4 } }, 'QQ 通道已移除'))),
         h('div', { className: 'xi-sect' }, '最近日记 · ' + (s.diary.date || '—')),
         h('div', { className: 'xi-card' },
           h('pre', { className: 'xi-pre' }, (s.diary.content || '还没有日记').slice(0, 1200))))
@@ -354,340 +349,15 @@ window.__ModuleLoader__.load({
       if (!ok) throw new Error('clipboard unavailable')
     }
 
-    /** 接入页的 QQ 入口：只看状态，点进去才是 QQ 通道次级页。 */
-    function QqEntry({ qq, onOpen }) {
-      const state = qq.connected ? '已连接' : '未连接'
-      const dot = qq.connected ? 'ready' : ''
-      return h('div', {
-        className: 'xi-card xi-click', role: 'button', tabIndex: 0,
-        style: { marginBottom: 10 },
-        onClick: onOpen,
-        onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen() } },
-      },
-        h('h4', null, 'channel · qq · v' + (qq.version || '0.3.0')),
-        h('div', { style: { fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 } },
-          h('i', { className: 'xi-dot ' + dot }), 'QQ',
-          h('span', { className: 'xi-dim', style: { fontWeight: 400 } }, state)),
-        h('div', { className: 'xi-kv' },
-          h('div', null, '账号', h('b', null, qq.selfId || '—')),
-          h('div', null, '会话', h('b', null, String(qq.peers || 0)))),
-        h('div', { className: 'xi-dim', style: { marginTop: 10 } }, '进入 QQ 通道 →'))
-    }
-
-    /**
-     * 白名单编辑器：一个号一个胶囊，× 移出；下面输入框回车/点「加入」加进来。
-     * 名单外的来客（rejected）做成虚线按钮，点一下直接加入。
-     */
-    function IdList({ title, hint, placeholder, list, rejected, busy, locked, onSave }) {
-      const [draft, setDraft] = use.useState('')
-      const [err, setErr] = use.useState('')
-      const items = Array.isArray(list) ? list : []
-      const off = !!busy || !!locked
-      const pending = (Array.isArray(rejected) ? rejected : []).filter((r) => !items.includes(r.id))
-      const add = (raw) => {
-        const id = String(raw ?? '').replace(/\D/g, '')
-        if (id.length < 4 || id.length > 12) { setErr('要 4~12 位数字'); return }
-        if (items.includes(id)) { setErr('已经在名单里了'); return }
-        setErr('')
-        setDraft('')
-        onSave([...items, id])
-      }
-      return h('div', null,
-        h('div', { className: 'xi-wl-head' },
-          h('b', null, title),
-          h('span', { className: 'xi-dim' }, items.length ? items.length + ' 个' : '空')),
-        h('div', { className: 'xi-wl-chips' },
-          items.length
-            ? items.map((id) => h('span', { className: 'xi-wl-chip', key: id },
-                id,
-                h('button', {
-                  className: 'xi-wl-x', type: 'button', title: '移出白名单',
-                  disabled: off, onClick: () => onSave(items.filter((x) => x !== id)),
-                }, '×')))
-            : h('span', { className: 'xi-dim', style: { fontSize: 12 } }, hint)),
-        h('div', { className: 'xi-wl-add' },
-          h('input', {
-            className: 'xi-wl-input', value: draft, placeholder, inputMode: 'numeric',
-            disabled: off,
-            onInput: (e) => { setDraft(e.target.value); setErr('') },
-            onKeyDown: (e) => { if (e.key === 'Enter') { e.preventDefault(); add(draft) } },
-          }),
-          h('button', {
-            className: 'xi-btn', type: 'button', disabled: off,
-            onClick: () => add(draft),
-          }, '加入')),
-        err ? h('div', { className: 'xi-rose', style: { fontSize: 12, marginTop: 6 } }, err) : null,
-        pending.length
-          ? h('div', { className: 'xi-wl-rej' },
-              h('span', { className: 'xi-dim' }, '找过你、但被挡下的：'),
-              pending.map((r) => h('button', {
-                key: r.kind + r.id, className: 'xi-wl-rejbtn', type: 'button', disabled: off,
-                title: (r.name ? r.name + ' · ' : '') + '最近 ' + new Date(r.at).toLocaleString('zh-CN')
-                  + (r.count > 1 ? ' · 共 ' + r.count + ' 条' : '') + ' · 点一下加进白名单',
-                onClick: () => onSave([...items, r.id]),
-              }, '+' + r.id)))
-          : null)
-    }
-
-    /** NapCat 次级页：开关、点火、诊断信息都在这里。 */
-    /**
-     * 白名单的真身是 dsh-xi-qq 的 settings.json。控制台宿主没重载时 buildState 里没有这两个列表，
-     * 所以直接问 QQ 插件自己的 /state 兜底：两处都能读到，就永远不会拿空名单去覆盖。
-     */
-    function useBridgeSettings() {
-      const [settings, setSettings] = use.useState(null)
-      const reload = use.useCallback(async () => {
-        try {
-          const r = await fetch('api/dsh-xi-qq/state', {
-            method: 'POST', headers: { 'content-type': 'application/json' },
-            body: '{}', cache: 'no-store',
-          })
-          if (!r.ok) return
-          const j = await r.json()
-          if (j && j.settings) setSettings(j.settings)
-        } catch { /* 桥没起来就先空着 */ }
-      }, [])
-      use.useEffect(() => {
-        reload()
-        const t = setInterval(reload, 30000)
-        return () => clearInterval(t)
-      }, [reload])
-      return { settings, reload }
-    }
-
-    function QqDetail({ qq, onRefresh, onBack }) {
-      const [busy, setBusy] = use.useState('')
-      const [err, setErr] = use.useState('')
-      const [pending, setPending] = use.useState({})
-      // 写回后宿主返回的 qq 快照（直接读的文件），白名单以它为准；桥的 /state 只做兜底
-      const [fileWl, setFileWl] = use.useState(null)
-      const bridge = useBridgeSettings()
-      // 点下去立刻翻，等宿主确认后再交回真实状态
-      const view = { ...qq, ...pending }
-      const post = async (body, label) => {
-        setBusy(label); setErr('')
-        try {
-          const r = await fetch('api/dsh-xi/channel', {
-            method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ id: 'qq', ...body }), cache: 'no-store',
-          })
-          if (!r.ok) throw new Error('HTTP ' + r.status)
-          const j = await r.json()
-          if (!j.ok) throw new Error(j.reason || '操作失败')
-          if (j.qq) setFileWl({ groups: j.qq.groups, users: j.qq.allowUsers })
-          await onRefresh()
-          await bridge.reload()
-          setPending({})
-        } catch (e) {
-          setErr(e.message || String(e))
-          setPending({})
-        } finally { setBusy('') }
-      }
-      const flip = (patch, label) => {
-        setPending((p) => ({ ...p, ...patch }))
-        void post(patch, label)
-      }
-      const pol = view.policy || {}
-      const pc = pol.privateChat || {}
-      const gp = pol.groupPolicy || {}
-      const mn = gp.mention || {}
-      const am = gp.ambient || {}
-      const lim = pol.limits || {}
-      const ch = pol.chat || {}
-      // 白名单：优先用刚写回的 qq 快照；宿主新版 buildState 也给；最后问 QQ 插件 /state。
-      // 三处都读不到就锁住，避免用空名单覆盖。
-      const pick = (key) => {
-        if (Array.isArray(pending[key])) return pending[key]
-        if (Array.isArray(view[key])) return view[key]
-        if (fileWl && Array.isArray(fileWl[key])) return fileWl[key]
-        if (Array.isArray(bridge.settings?.[key])) return bridge.settings[key]
-        return null
-      }
-      const groupsWl = pick('groups')
-      const usersWl = pick('allowUsers')
-      // 只改一个字段也走深合并，不用回传整块
-      const set = (patch, label) => { void post({ patch }, label) }
-      const state = view.connected ? '已连接' : '未连接'
-      const dot = view.connected ? 'ready' : ''
-      return h('div', null,
-        h('div', { className: 'xi-row', style: { marginTop: 0, marginBottom: 10 } },
-          h('button', { className: 'xi-btn', onClick: onBack }, '← 返回'),
-          h('span', { className: 'xi-dim' }, '通道 / QQ')),
-        h('div', { className: 'xi-card', style: { marginBottom: 12 } },
-          h('h4', null, 'channel · qq · v' + (view.version || '0.3.0')),
-          h('div', { style: { fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 } },
-            h('i', { className: 'xi-dot ' + dot }), 'QQ',
-            h('span', { className: 'xi-dim', style: { fontWeight: 400 } }, state)),
-          h('div', { className: 'xi-kv' },
-            h('div', null, '账号', h('b', null, view.selfId || '—')),
-            h('div', null, '会话', h('b', null, String(view.peers || 0))),
-            h('div', null, '桥', h('b', null, view.enabled === false ? '已停用' : (view.connected ? '在线' : '待连'))),
-            h('div', null, '最近', h('b', null, view.at ? new Date(view.at).toLocaleTimeString('zh-CN') : '—')))),
-        h('div', { className: 'xi-sect' }, '开关'),
-        h('div', { className: 'xi-card', style: { marginBottom: 12 } },
-          h(Toggle, {
-            on: view.enabled !== false, disabled: busy !== '',
-            onChange: (v) => flip({ enabled: v }, 'enabled'),
-            title: '启用 QQ 通道',
-            hint: '关掉后 QQ 消息不再进会话；协议端要另外接一个 OneBot 11 服务',
-          }),
-          err ? h('div', { className: 'xi-rose', style: { marginTop: 10 } }, err) : null),
-
-        h('div', { className: 'xi-sect' }, '白名单'),
-        h('div', { className: 'xi-card', style: { marginBottom: 12 } },
-          (groupsWl === null || usersWl === null)
-            ? h('div', { className: 'xi-rose', style: { fontSize: 12, marginBottom: 10 } },
-                '读不到当前白名单（QQ 插件没连上）。先别改，免得把已有名单覆盖成空。')
-            : null,
-          h(IdList, {
-            title: '群', hint: '还没有群 · 群里一律不回',
-            placeholder: '群号，例如 1132390404',
-            list: groupsWl || [], busy, locked: groupsWl === null,
-            rejected: (view.rejected || []).filter((r) => r.kind === 'group'),
-            onSave: (next) => set({ groups: next }, 'wl-group'),
-          }),
-          h('div', { className: 'xi-wl-sep' }),
-          h(IdList, {
-            title: '私聊', hint: '还没有人 · 私聊一律不回',
-            placeholder: 'QQ 号，例如 1878017644',
-            list: usersWl || [], busy, locked: usersWl === null,
-            rejected: (view.rejected || []).filter((r) => r.kind === 'private'),
-            onSave: (next) => set({ allowUsers: next }, 'wl-user'),
-          }),
-          h('div', { className: 'xi-dim', style: { marginTop: 10 } },
-            '只有名单里的群和私聊会回话。名单外的只记一笔，不建会话、不花算力；'
-            + '真有人来找，会出现在上面的虚线圈里，点一下就能加进来。')),
-
-        h('div', { className: 'xi-sect' }, '私聊'),
-        h('div', { className: 'xi-card', style: { marginBottom: 12 } },
-          h(Toggle, {
-            on: pc.enabled !== false, disabled: busy !== '',
-            onChange: (v) => set({ privateChat: { enabled: v } }, 'pc'),
-            title: '启用私聊', hint: '关掉后私聊一律不回，群里不受影响',
-          }),
-          h(NumField, {
-            label: '每小时上限', value: pc.maxPerHour ?? 0, suffix: '条（0 = 不限）',
-            disabled: busy !== '', onCommit: (n) => set({ privateChat: { maxPerHour: n } }, 'pc'),
-          }),
-          h(NumField, {
-            label: '最小间隔', value: pc.minIntervalSec ?? 0, suffix: '秒',
-            disabled: busy !== '', onCommit: (n) => set({ privateChat: { minIntervalSec: n } }, 'pc'),
-          })),
-
-        h('div', { className: 'xi-sect' }, '群聊'),
-        h('div', { className: 'xi-card', style: { marginBottom: 12 } },
-          h(Toggle, {
-            on: gp.enabled !== false, disabled: busy !== '',
-            onChange: (v) => set({ groupPolicy: { enabled: v } }, 'gp'),
-            title: '启用群聊', hint: '总开关；群号还要在 groups 白名单里',
-          }),
-          h('div', { className: 'xi-dim', style: { marginTop: 6 } },
-            (groupsWl || []).length
-              ? '名单里的 ' + groupsWl.length + ' 个群会回话；白名单在上面改'
-              : '白名单是空的，群里一律不回；在上面加群号'),
-          h('div', { style: { marginTop: 12, borderTop: '1px solid var(--xi-line)', paddingTop: 2 } },
-            h(Toggle, {
-              on: mn.enabled !== false, disabled: busy !== '',
-              onChange: (v) => set({ groupPolicy: { mention: { enabled: v } } }, 'mn'),
-              title: '被 @ 时回复', onWord: '（已开）', offWord: '（已关）',
-            }),
-            h(NumField, {
-              label: '每小时上限', value: mn.maxPerHour ?? 0, suffix: '条',
-              disabled: busy !== '', onCommit: (n) => set({ groupPolicy: { mention: { maxPerHour: n } } }, 'mn'),
-            }),
-            h(NumField, {
-              label: '最小间隔', value: mn.minIntervalSec ?? 0, suffix: '秒',
-              disabled: busy !== '', onCommit: (n) => set({ groupPolicy: { mention: { minIntervalSec: n } } }, 'mn'),
-            })),
-          h('div', { style: { marginTop: 12, borderTop: '1px solid var(--xi-line)', paddingTop: 2 } },
-            h(Toggle, {
-              on: !!am.enabled, disabled: busy !== '',
-              onChange: (v) => set({ groupPolicy: { ambient: { enabled: v } } }, 'am'),
-              title: '没被 @ 也偶尔接话', hint: '过冷却、掷骰子通过才回',
-              onWord: '（已开）', offWord: '（已关）',
-            }),
-            h(Toggle, {
-              on: am.trigger === 'any', disabled: busy !== '',
-              onChange: (v) => set({ groupPolicy: { ambient: { trigger: v ? 'any' : 'keywords' } } }, 'am'),
-              title: '不只看关键词', hint: '开：群里任何一句都可能接；关：只接关键词或问句',
-              onWord: '（任何话）', offWord: '（关键词/问句）',
-            }),
-            h(NumField, {
-              label: '每小时上限', value: am.maxPerHour ?? 0, suffix: '条',
-              disabled: busy !== '', onCommit: (n) => set({ groupPolicy: { ambient: { maxPerHour: n } } }, 'am'),
-            }),
-            h(NumField, {
-              label: '最小间隔', value: am.minIntervalSec ?? 0, suffix: '秒',
-              disabled: busy !== '', onCommit: (n) => set({ groupPolicy: { ambient: { minIntervalSec: n } } }, 'am'),
-            }),
-            h(NumField, {
-              label: '触发概率', value: am.chance ?? 0.5, suffix: '0 ~ 1',
-              min: 0, max: 1, float: true,
-              disabled: busy !== '', onCommit: (n) => set({ groupPolicy: { ambient: { chance: n } } }, 'am'),
-            }))),
-
-        h('div', { className: 'xi-sect' }, '总量'),
-        h('div', { className: 'xi-card', style: { marginBottom: 12 } },
-          h(Toggle, {
-            on: lim.dailyEnabled !== false, disabled: busy !== '',
-            onChange: (v) => set({ limits: { dailyEnabled: v } }, 'lim'),
-            title: '每日总量上限', hint: '所有私聊和群聊加起来，过零点重置',
-            onWord: '（已开）', offWord: '（已关）',
-          }),
-          h(NumField, {
-            label: '每天最多', value: lim.dailyReplies ?? 200, suffix: '条',
-            disabled: busy !== '', onCommit: (n) => set({ limits: { dailyReplies: n } }, 'lim'),
-          }),
-          h('div', { className: 'xi-dim', style: { marginTop: 8 } },
-            '今天已回 ' + (view.daily && view.daily.count ? view.daily.count : 0) + ' 条')),
-
-        h('div', { className: 'xi-sect' }, '说话方式'),
-        h('div', { className: 'xi-card', style: { marginBottom: 12 } },
-          h(Toggle, {
-            on: ch.chunkReply !== false, disabled: busy !== '',
-            onChange: (v) => set({ chat: { chunkReply: v } }, 'ch'),
-            title: '分条发', hint: '按句切开，隔几百毫秒一条',
-            onWord: '（已开）', offWord: '（已关）',
-          }),
-          h(NumField, {
-            label: '最多几条', value: ch.maxChunks ?? 3, suffix: '条', min: 1, max: 6,
-            disabled: busy !== '', onCommit: (n) => set({ chat: { maxChunks: n } }, 'ch'),
-          }),
-          h(Toggle, {
-            on: ch.typing !== false, disabled: busy !== '',
-            onChange: (v) => set({ chat: { typing: v } }, 'ch'),
-            title: '显示正在输入', hint: '协议端不认就自动降级',
-            onWord: '（已开）', offWord: '（已关）',
-          }),
-          h(Toggle, {
-            on: ch.styleNote !== false, disabled: busy !== '',
-            onChange: (v) => set({ chat: { styleNote: v } }, 'ch'),
-            title: '会话开头带说话风格', hint: '每个会话只加一次',
-            onWord: '（已开）', offWord: '（已关）',
-          })),
-        h('div', { className: 'xi-note' },
-          '白名单改的就是 ~/.dsh/xi-qq/settings.json 里的 groups / allowUsers；桥每两秒看一次文件，改完即时生效，不用重启。'),
-        h('div', { className: 'xi-sect' }, '位置'),
-        h('div', { className: 'xi-card' },
-          h('div', { className: 'xi-kv', style: { marginTop: 0 } },
-            h('div', null, '桥日志', h('b', { style: { fontSize: 12.5, fontWeight: 500 } }, '~/.dsh/xi-qq/qq.log')),
-            h('div', null, '连接', h('b', { style: { fontSize: 12.5, fontWeight: 500 } }, 'ws://127.0.0.1:3001'))),
-          h('div', { className: 'xi-note', style: { marginBottom: 0 } },
-            '开关写的是 ~/.dsh/xi-qq/settings.json，桥每两秒看一次文件，改完即时生效，不用重启。')))
-    }
-
-    function Channels({ s, onRefresh }) {
-      const [sub, setSub] = use.useState('')
-      const qq = (s.channels && s.channels.qq) || {}
-      const others = s.extensions.filter((x) => x.type === 'channel' && x.id !== 'qq')
-      if (sub === 'qq') return h(QqDetail, { qq, onRefresh, onBack: () => setSub('') })
+    function Channels({ s }) {
+      const others = s.extensions.filter((x) => x.type === 'channel')
       return h('div', null,
         h('div', { className: 'xi-note' },
-          'QQ 通道：往 ws://127.0.0.1:3001 接一个 OneBot 11 服务就能用。点卡片看开关、白名单和频率。'),
-        h('div', { className: 'xi-sect' }, '通道'),
-        h(QqEntry, { qq, onOpen: () => setSub('qq') }),
-        others.length ? h('div', { className: 'xi-sect' }, '其他') : null,
-        others.length ? Cards({ list: others }) : null)
+          '外部接入已清空。QQ 通道（dsh-xi-qq + NapCat）在 2026-11-16 整个移除，理由是第三方协议端有封号风险；以后也不再接。'),
+        others.length ? h('div', { className: 'xi-sect' }, '通道') : null,
+        others.length
+          ? Cards({ list: others })
+          : h('div', { className: 'xi-empty' }, '没有接入任何外部通道'))
     }
 
     function Media({ s }) {
@@ -704,7 +374,137 @@ window.__ModuleLoader__.load({
         h('div', { className: 'xi-card' }, h('pre', { className: 'xi-pre' }, s.soul.body)))
     }
 
-    const TABS = [['overview', '总览'], ['memory', '记忆'], ['mood', '心情'], ['cost', '成本'],
+    function Archive() {
+      const [ov, setOv] = use.useState(null)
+      const [err, setErr] = use.useState('')
+      const [form, setForm] = use.useState({ q: '', kind: '', from: '', to: '', order: 'newest' })
+      const [result, setResult] = use.useState(null)
+      const [busy, setBusy] = use.useState(false)
+      const [open, setOpen] = use.useState(null)
+      const [day, setDay] = use.useState('')
+      const [lines, setLines] = use.useState(null)
+      const post = (p) => fetch(p, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}',
+      }).then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
+      use.useEffect(() => {
+        let alive = true
+        post('/api/dsh-xi-memory/overview')
+          .then((j) => { if (alive) setOv(j) })
+          .catch((e) => { if (alive) setErr(e.message || String(e)) })
+        return () => { alive = false }
+      }, [])
+      const change = (patch) => setForm(Object.assign({}, form, patch))
+      const run = (cursor) => {
+        const q = form.q.trim()
+        if (q === '') return
+        setBusy(true)
+        setErr('')
+        const qs = new URLSearchParams({ q, limit: '20', order: form.order })
+        if (form.kind) qs.set('kind', form.kind)
+        if (form.from) qs.set('from', form.from)
+        if (form.to) qs.set('to', form.to)
+        if (cursor) qs.set('cursor', String(cursor))
+        post('/api/dsh-xi-memory/search?' + qs)
+          .then((j) => setResult(cursor
+            ? Object.assign({}, j, { items: (result ? result.items : []).concat(j.items) })
+            : j))
+          .catch((e) => setErr(e.message || String(e)))
+          .finally(() => setBusy(false))
+      }
+      const show = (item, offset) => {
+        const base = open && open.ref === item.ref ? open.text : ''
+        setOpen({ ref: item.ref, text: base, loading: true })
+        post('/api/dsh-xi-memory/read?ref=' + encodeURIComponent(item.ref) + '&offset=' + (offset || 0) + '&limit=2000')
+          .then((j) => setOpen({ ref: item.ref, text: base + j.text, nextOffset: j.nextOffset, total: j.total, loading: false }))
+          .catch((e) => setOpen({ ref: item.ref, text: base, error: e.message || String(e), loading: false }))
+      }
+      const openDay = (d) => {
+        if (day === d) { setDay(''); setLines(null); return }
+        setDay(d); setLines(null)
+        post('/api/dsh-xi-memory/day?day=' + encodeURIComponent(d))
+          .then((j) => setLines(j.lines || []))
+          .catch(() => setLines([]))
+      }
+      const field = {
+        padding: '6px 9px', borderRadius: 8, border: '1px solid var(--xi-line)',
+        background: 'transparent', color: 'inherit', font: 'inherit', fontSize: 12.5,
+      }
+      const kinds = [['', '全部'], ['conversation', '聊天'], ['diary', '日记']]
+      const total = ov ? ov.days.reduce((n, d) => n + d.entries, 0) : 0
+      const last = ov && ov.days.length > 0 ? Math.max.apply(null, ov.days.map((d) => d.mtime)) : 0
+      return h('div', null,
+        h('div', { className: 'xi-row' },
+          h('span', { className: 'xi-muted' }, (ov ? ov.days.length : 0) + ' 天 · ' + total + ' 条 · ' +
+            (ov ? ov.sessions : 0) + ' 个会话'),
+          h('span', { className: 'xi-state' }, '最后写入 ' +
+            (last ? new Date(last).toLocaleString('zh-CN', { hour12: false }) : '—'))),
+        h('div', { className: 'xi-setting', style: { display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginTop: 10 } },
+          h('select', { style: field, value: form.kind, onChange: (e) => change({ kind: e.target.value }) },
+            kinds.map((k) => h('option', { key: k[0], value: k[0] }, k[1]))),
+          h('label', { className: 'xi-dim' }, '从 ', h('input', {
+            type: 'date', style: field, value: form.from, onChange: (e) => change({ from: e.target.value }),
+          })),
+          h('label', { className: 'xi-dim' }, '到 ', h('input', {
+            type: 'date', style: field, value: form.to, onChange: (e) => change({ to: e.target.value }),
+          })),
+          h('select', { style: field, value: form.order, onChange: (e) => change({ order: e.target.value }) },
+            h('option', { value: 'newest' }, '新的在前'),
+            h('option', { value: 'oldest' }, '旧的在前'))),
+        h('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
+          h('input', {
+            style: Object.assign({ flex: 1 }, field), value: form.q,
+            placeholder: '原话里的一小段，比如「火锅」',
+            onChange: (e) => change({ q: e.target.value }),
+            onKeyDown: (e) => { if (e.key === 'Enter') run(0) },
+          }),
+          h('button', { className: 'xi-btn', onClick: () => run(0), disabled: busy }, busy ? '搜…' : '找')),
+        err ? h('div', { className: 'xi-rose', style: { marginTop: 8 } }, err) : null,
+        result === null ? null : h('div', null,
+          h('div', { className: 'xi-dim', style: { marginTop: 10 } },
+            result.items.length === 0 ? '没有找到。换个词，或者直接翻下面的日子。' : '找到 ' + result.items.length + ' 条' + (result.total ? '（共 ' + result.total + ' 条）' : '')),
+          h('div', { className: 'xi-card', style: { marginTop: 8 } },
+            result.items.map((item, i) => h('div', {
+              key: item.ref,
+              style: { padding: '10px 0', borderBottom: i + 1 < result.items.length ? '1px solid var(--xi-line)' : 'none' },
+            },
+              h('div', { className: 'xi-dim', style: { fontSize: 11.5 } },
+                [item.who, item.time, item.ref].filter(Boolean).join(' · ')),
+              h('div', { className: 'xi-muted', style: { fontSize: 12.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' } }, item.text),
+              h('div', { style: { marginTop: 6, display: 'flex', gap: 8 } },
+                h('button', { className: 'xi-btn', onClick: () => show(item, 0) }, '读原文')),
+              open && open.ref === item.ref ? h('div', null,
+                open.loading ? h('div', { className: 'xi-dim' }, '读取中…') : null,
+                open.error ? h('div', { className: 'xi-rose' }, open.error) : null,
+                open.text ? h('pre', { className: 'xi-pre', style: { maxHeight: 320, overflow: 'auto', marginTop: 6 } }, open.text) : null,
+                open.nextOffset ? h('button', {
+                  className: 'xi-btn', style: { marginTop: 6 },
+                  onClick: () => show(item, open.nextOffset),
+                }, '继续读（共 ' + open.total + ' 字）') : null) : null))),
+          result.nextCursor ? h('button', {
+            className: 'xi-btn', style: { marginTop: 8 }, disabled: busy,
+            onClick: () => run(result.nextCursor),
+          }, '更多') : null),
+        h('div', { className: 'xi-sect' }, '按天归档'),
+        ov && ov.days.length > 0
+          ? h('div', { className: 'xi-card' }, ov.days.map((d) => h('div', { key: d.day },
+            h('div', {
+              className: 'xi-click',
+              style: { display: 'flex', gap: 10, padding: '7px 4px', borderBottom: '1px solid var(--xi-line)' },
+              onClick: () => openDay(d.day),
+            },
+              h('span', { className: 'xi-muted', style: { fontVariantNumeric: 'tabular-nums' } }, d.day),
+              h('span', { className: 'xi-state' }, d.entries + ' 条 · ' + Math.round(d.bytes / 1024) + ' KB' +
+                (day === d.day ? ' · 收起' : ''))),
+            day === d.day ? h('div', { className: 'xi-pre', style: { maxHeight: 320, overflow: 'auto', padding: '6px 4px' } },
+              (lines || []).map((l, i) => h('div', { key: i, style: { padding: '3px 0 3px 12px' } },
+                l.time ? h('span', { className: 'xi-dim', style: { marginRight: 6 } }, l.time) : null,
+                l.who ? h('b', null, l.who + '：') : null,
+                l.text))) : null)))
+          : h('div', { className: 'xi-dim' }, '还没有归档。'),
+        h('div', { className: 'xi-note' }, '归档在 ' + (ov ? ov.archiveDir : '') + '；这一页只读，改记忆改文件。'))
+    }
+
+    const TABS = [['overview', '总览'], ['memory', '记忆'], ['archive', '归档'], ['mood', '心情'], ['cost', '成本'],
       ['channels', '接入'], ['media', '形象 · 语音'], ['soul', '性格']]
 
     const inputStyle = {
@@ -771,7 +571,7 @@ window.__ModuleLoader__.load({
       if (error && !data) return h('div', { className: 'xi-root' }, h('div', { className: 'xi-rose' }, '读取失败：' + error))
       if (!data) return h('div', { className: 'xi-root' }, h('div', { className: 'xi-dim' }, '读取中…'))
       if (data.onboarding) return h(Setup, { base, onDone: load })
-      const Body = { overview: Overview, memory: Memory, mood: Mood, cost: Cost,
+      const Body = { overview: Overview, memory: Memory, archive: Archive, mood: Mood, cost: Cost,
         channels: Channels, media: Media, soul: Soul }[tab]
       return h('div', { className: 'xi-root' },
         h('div', { className: 'xi-head' },
@@ -806,10 +606,7 @@ window.__ModuleLoader__.load({
       ctx.slots.inject('main', () => ctx.slots.register({
         name: 'main', key: 'xi',
       }, () => h(View)))
-      // 对话页顶部的标签，保留：从会话里也能直接看
-      ctx.slots.inject('conversation.view', () => ctx.slots.register({
-        name: 'conversation.view', id: 'xi-console', order: 30, label: () => '汐',
-      }, () => h(View)))
+      // 不再注册 conversation.view：会话页的「汐」标签和左侧边栏重复，入口只留边栏。
     }
 
     return { name: 'dsh-xi', inject: ['slots', 'layout'], apply }
