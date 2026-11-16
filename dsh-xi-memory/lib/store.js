@@ -101,7 +101,7 @@ function timeOf(line, day, isDiary) {
  * 按字面在聊天归档与日记里找，返回最新的在前。
  * @returns {{items: Array<{ref: string, time: string, who: string, text: string}>, nextCursor?: number, files: number}}
  */
-export function searchArchive({ dirs, query, kind, from, to, limit = 8, cursor = 0 }) {
+export function searchArchive({ dirs, query, kind, from, to, order = 'newest', limit = 8, cursor = 0 }) {
   const needle = String(query ?? '').trim()
   if (needle === '') return { items: [], files: 0 }
   const sources = []
@@ -134,11 +134,12 @@ export function searchArchive({ dirs, query, kind, from, to, limit = 8, cursor =
       if (matches.length >= MAX_SCAN_MATCHES) break
     }
   }
-  matches.sort((a, b) => b.time.localeCompare(a.time))
+  if (order === 'oldest') matches.sort((a, b) => a.time.localeCompare(b.time))
+  else matches.sort((a, b) => b.time.localeCompare(a.time))
   const start = Math.max(0, Number(cursor) || 0)
   const items = matches.slice(start, start + limit)
   const next = start + limit < matches.length ? start + limit : undefined
-  return next === undefined ? { items, files: scanned } : { items, files: scanned, nextCursor: next }
+  return next === undefined ? { items, files: scanned, total: matches.length } : { items, files: scanned, total: matches.length, nextCursor: next }
 }
 
 /** 读某个 ref 指向的文件片段；offset/limit 以 Unicode 字符计。 */
@@ -161,8 +162,8 @@ export function readRefText({ memoryDir, ref, offset = 0, limit = 2000 }) {
   const piece = all.slice(start + off, start + off + len).join('')
   const nextOffset = start + off + len < all.length ? off + len : undefined
   return nextOffset === undefined
-    ? { ref, text: piece, end: true }
-    : { ref, text: piece, nextOffset, end: false }
+    ? { ref, text: piece, end: true, total: all.length }
+    : { ref, text: piece, nextOffset, end: false, total: all.length }
 }
 
 // ---- 开场注入 ----

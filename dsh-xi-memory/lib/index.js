@@ -239,9 +239,28 @@ export function apply(ctx, rawConfig) {
     const result = searchArchive({
       dirs: { conversations: config.archiveDir, diary: config.diaryDir },
       query,
+      kind: params.get('kind') || undefined,
+      from: params.get('from') || undefined,
+      to: params.get('to') || undefined,
+      order: params.get('order') === 'oldest' ? 'oldest' : 'newest',
       limit: Math.max(1, Math.min(50, Number(params.get('limit')) || 20)),
+      cursor: Number(params.get('cursor')) || 0,
     })
     return json(result)
+  }
+
+  const readHandler = async (request) => {
+    const params = urlOf(request).searchParams
+    try {
+      return json(readRefText({
+        memoryDir: config.memoryDir,
+        ref: params.get('ref') || '',
+        offset: Number(params.get('offset')) || 0,
+        limit: Math.max(1, Math.min(16000, Number(params.get('limit')) || 2000)),
+      }))
+    } catch (err) {
+      return json({ error: err && err.message ? err.message : String(err) }, 400)
+    }
   }
 
   let routesDone = false
@@ -258,6 +277,7 @@ export function apply(ctx, rawConfig) {
       ['/api/dsh-xi-memory/overview', overviewHandler],
       ['/api/dsh-xi-memory/day', dayHandler],
       ['/api/dsh-xi-memory/search', searchHandler],
+      ['/api/dsh-xi-memory/read', readHandler],
     ]
     try {
       c.effect(() => {
