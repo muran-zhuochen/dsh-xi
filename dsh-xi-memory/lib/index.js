@@ -1,5 +1,6 @@
 import path from 'node:path'
-import { appendMessage, loadSeen, readRefText, renderMemoryBlock, saveSeen, searchArchive } from './store.js'
+import fs from 'node:fs'
+import { appendMessage, listDayFiles, loadSeen, readRefText, readText, renderMemoryBlock, saveSeen, searchArchive } from './store.js'
 
 export const name = 'dsh-xi-memory'
 export const inject = ['tools', 'systemPrompt']
@@ -175,4 +176,84 @@ export function apply(ctx, rawConfig) {
     const disposers = [findTool, readTool].map((tool) => ctx.tools.register(tool))
     return () => { for (const dispose of disposers) { try { dispose?.() } catch { /* 已卸载 */ } } }
   }, 'dsh-xi-memory: 工具')
+
+  // 4. 控制台接口（只读）
+  const json = (body, status = 200) => new Response(JSON.stringify(body), {
+    status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' },
+  })
+
+  const LINE_RE = /^- (\d{2}:\d{2}:\d{2}) \[([^\]]*)\] ([^：]+)：(.*)$/
+
+  const urlOf = (request) => {
+    try { return new URL(request.url) } catch { return new URL(request.url || '/', 'http://localhost') }
+  }
+
+  const overviewHandler = async () => {
+    const days = listDayFiles(config.archiveDir).map((f) => {
+      const abs = path.join(config.archiveDir, f)
+      let stat = { size: 0, mtimeMs: 0 }
+      try { stat = fs.statSync(abs) } catch { /* 文件刚被删 */ }
+      const entries = readText(abs).split(/\r?\n/).filter((l) => LINE_RE.test(l)).length
+      return { day: f.slice(0, 10), entries, bytes: stat.size, mtime: stat.mtimeMs }
+    }).reverse()
+    return json({
+      archiveDir: config.archiveDir,
+      diaryDir: config.diaryDir,
+      memoryDir: config.memoryDir,
+      sessions: seen.size,
+      days,
+      facts: readText(path.join(config.memoryDir, 'MEMORY.md')).slice(0, 12000),
+      mood: readText(path.join(config.memoryDir, 'MOOD.md')).slice(0, 2000),
+      now: Date.now(),
+    })
+  }
+
+  const dayHandler = async (request) => {
+    const day = urlOf(request).searchParams.get('day') || ''
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ error: 'day 参数不对' }, 400)
+    const text = readText(path.join(config.archiveDir, `${day}.md`))
+    if (text === '') return json({ day, lines: [] })
+    const lines = []
+    for (const raw of text.split(/\r?\n/)) {
+      const m = LINE_RE.exec(raw)
+      if (m) lines.push({ time: m[1], session: m[2], who: m[3], text: m[4] })
+      else if (raw !== '' && !raw.startsWith('#')) lines.push({ time: '', session: '', who: '', text: raw })
+    }
+    return json({ day, lines })
+  }
+
+  const searchHandler = async (request) => {
+    const params = urlOf(request).searchParams
+    const query = params.get('q') || ''
+    const result = searchArchive({
+      dirs: { conversations: config.archiveDir, diary: config.diaryDir },
+      query,
+      limit: Math.max(1, Math.min(50, Number(params.get('limit')) || 20)),
+    })
+    return json(result)
+  }
+
+  let routesDone = false
+  const registerRoutes = (c, label) => {
+    if (routesDone) return
+    const face = (c.get ? c.get('connection') : c.connection)
+    if (face === undefined || typeof face.register !== 'function') return
+    const routes = [
+      ['/api/dsh-xi-memory/overview', overviewHandler],
+      ['/api/dsh-xi-memory/day', dayHandler],
+      ['/api/dsh-xi-memory/search', searchHandler],
+    ]
+    try {
+      c.effect(() => {
+        const offs = routes.map(([p, handler]) => face.register({
+          path: p, methods: ['GET'], requestBody: 'buffered', fetch: handler,
+        }))
+        return () => { for (const off of offs) { try { off?.() } catch { /* 已卸载 */ } } }
+      }, `dsh-xi-memory: routes (${label})`)
+      routesDone = true
+    } catch { /* 老版本没有 connection 面时只影响控制台 */ }
+  }
+
+  try { registerRoutes(ctx, 'direct') } catch { /* 忽略 */ }
+  try { ctx.inject(['connection'], (c) => registerRoutes(c, 'injected')) } catch { /* 忽略 */ }
 }
