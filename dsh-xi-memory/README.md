@@ -11,7 +11,7 @@
 
 不调模型、不跑定时任务、不衰减、不改你的记忆文件。
 
-控制台的数据来自三个只读接口：`/api/dsh-xi-memory/overview`、`/day?day=YYYY-MM-DD`、`/search?q=`。
+控制台的数据来自三个只读接口（POST，和 dsh-xi 用同一条 connection 通道）：`/api/dsh-xi-memory/overview`、`/day?day=YYYY-MM-DD`、`/search?q=`。注册失败会写进 `~/.dsh/xi-memory.log`。
 
 ## 配置
 

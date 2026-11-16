@@ -1,9 +1,20 @@
 import path from 'node:path'
 import fs from 'node:fs'
+import os from 'node:os'
 import { appendMessage, listDayFiles, loadSeen, readRefText, readText, renderMemoryBlock, saveSeen, searchArchive } from './store.js'
 
 export const name = 'dsh-xi-memory'
 export const inject = ['tools', 'systemPrompt']
+
+const DSH_HOME = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
+const LOG = path.join(DSH_HOME, 'xi-memory.log')
+
+function trace(msg) {
+  try {
+    fs.mkdirSync(DSH_HOME, { recursive: true })
+    fs.appendFileSync(LOG, `${new Date().toISOString()} ${msg}\n`)
+  } catch { /* 日志写不了不影响功能 */ }
+}
 
 const DEFAULTS = {
   memoryDir: 'E:/Ai-Agent/汐/记忆',
@@ -237,7 +248,10 @@ export function apply(ctx, rawConfig) {
   const registerRoutes = (c, label) => {
     if (routesDone) return
     const face = (c.get ? c.get('connection') : c.connection)
-    if (face === undefined || typeof face.register !== 'function') return
+    if (face === undefined || typeof face.register !== 'function') {
+      trace(`routes:${label} no-face`)
+      return
+    }
     const routes = [
       ['/api/dsh-xi-memory/overview', overviewHandler],
       ['/api/dsh-xi-memory/day', dayHandler],
@@ -246,14 +260,18 @@ export function apply(ctx, rawConfig) {
     try {
       c.effect(() => {
         const offs = routes.map(([p, handler]) => face.register({
-          path: p, methods: ['GET'], requestBody: 'buffered', fetch: handler,
+          path: p, methods: ['POST'], requestBody: 'buffered', fetch: handler,
         }))
         return () => { for (const off of offs) { try { off?.() } catch { /* 已卸载 */ } } }
       }, `dsh-xi-memory: routes (${label})`)
       routesDone = true
-    } catch { /* 老版本没有 connection 面时只影响控制台 */ }
+      trace(`routes:${label} registered ${routes.length}`)
+    } catch (err) {
+      trace(`routes:${label} threw ${err && err.message}`)
+    }
   }
 
-  try { registerRoutes(ctx, 'direct') } catch { /* 忽略 */ }
-  try { ctx.inject(['connection'], (c) => registerRoutes(c, 'injected')) } catch { /* 忽略 */ }
+  trace('apply-enter')
+  try { registerRoutes(ctx, 'direct') } catch (err) { trace('routes:direct outer ' + (err && err.message)) }
+  try { ctx.inject(['connection'], (c) => registerRoutes(c, 'injected')) } catch (err) { trace('routes:inject outer ' + (err && err.message)) }
 }

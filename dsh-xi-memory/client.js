@@ -59,6 +59,7 @@ window.__ModuleLoader__.load({
 
     const kb = (n) => (n >= 1024 ? (n / 1024).toFixed(0) + ' KB' : n + ' B')
     const when = (ms) => (ms ? new Date(ms).toLocaleString('zh-CN', { hour12: false }) : '—')
+    const post = (p) => fetch(p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
 
     function useOverview() {
       const [data, setData] = use.useState(null)
@@ -66,7 +67,7 @@ window.__ModuleLoader__.load({
       const [tick, setTick] = use.useState(0)
       use.useEffect(() => {
         let alive = true
-        fetch(API + '/overview')
+        post(API + '/overview')
           .then((r) => (r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))))
           .then((j) => { if (alive) { setData(j); setError('') } })
           .catch((e) => { if (alive) setError(e.message || String(e)) })
@@ -101,7 +102,7 @@ window.__ModuleLoader__.load({
         const next = !open
         setOpen(next)
         if (next && lines === null) {
-          fetch(API + '/day?day=' + encodeURIComponent(entry.day))
+          post(API + '/day?day=' + encodeURIComponent(entry.day))
             .then((r) => r.json())
             .then((j) => setLines(j.lines || []))
             .catch(() => setLines([]))
@@ -125,7 +126,7 @@ window.__ModuleLoader__.load({
       const [showFacts, setShowFacts] = use.useState(false)
       const search = (q) => {
         setBusy(true)
-        fetch(API + '/search?q=' + encodeURIComponent(q) + '&limit=20')
+        post(API + '/search?q=' + encodeURIComponent(q) + '&limit=20')
           .then((r) => r.json())
           .then((j) => setHits(j.items || []))
           .catch(() => setHits([]))
@@ -179,9 +180,7 @@ window.__ModuleLoader__.load({
       ctx.slots.inject('main', () => ctx.slots.register({
         name: 'main', key: 'xi-memory',
       }, () => h(View)))
-      ctx.slots.inject('conversation.view', () => ctx.slots.register({
-        name: 'conversation.view', id: 'xi-memory', order: 31, label: () => '记忆',
-      }, () => h(View)))
+      // 会话页不再挂标签：入口只在左侧边栏。
     }
 
     return { name: 'dsh-xi-memory', inject: ['slots', 'layout'], apply }
