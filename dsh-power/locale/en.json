@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Power switch",
+    "description": "A power button in the top-right corner of the window; open it to minimize, restart, or close the window to the tray.",
+    "detail": "docs/DETAIL.md"
+  }
+}

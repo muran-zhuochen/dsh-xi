@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "电源开关",
+    "description": "窗口右上角的一个电源按钮，点开可以最小化、重启，或把窗口关到托盘。",
+    "detail": "docs/DETAIL.md"
+  }
+}

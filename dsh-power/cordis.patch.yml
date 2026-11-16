@@ -1,0 +1,4 @@
+# 宿主半侧：一个普通 Cordis 插件，注册 /api/dsh-power/* 路由；页面半侧由 dsh.client 声明加载。
+- insert:
+    - id: dsh-power
+      name: dsh-power
