@@ -1,0 +1,7 @@
+# Bundle patch layer: 宿主半侧是普通 Cordis 插件，只注册两个工具和一段系统提示。
+- insert:
+    - id: dsh-xi-memory
+      name: dsh-xi-memory
+      config:
+        memoryDir: E:/Ai-Agent/汐/记忆
+        timeZone: Asia/Shanghai

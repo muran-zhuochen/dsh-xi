@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Xi memory",
+    "description": "Archives every conversation by day into Xi's memory folder, injects standing facts and mood at session start, and adds memory_find / memory_read to search past conversations by literal text. No model calls, no scheduled jobs."
+  }
+}
