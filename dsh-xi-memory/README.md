@@ -7,11 +7,11 @@
 - **归档**：`session/event` 里的 `user/message` 和 `assistant/message`，只收正文（工具过程、注入的提示词、审批通知都不进），按天写进 `记忆/archive/conversations/YYYY-MM-DD.md`，一行一条。
 - **开场注入**：`MEMORY.md` 的事实和 `MOOD.md` 的状态/原因，拼成一段放进系统提示词（`xi-memory` section，order 90）。文件没变就复用，不重建。
 - **检索**：`memory_find` 按字面在聊天归档和日记里找（一次 8 条、每条 200 字以内的摘要），`memory_read` 按字符分页读原文。
-- **控制台**：侧边栏「记忆」页（对话页也有同名标签），能按天翻归档、搜旧话、看 MEMORY.md / MOOD.md 和最后写入时间。只读，改记忆还是改文件。
+- **归档页**：并进汐控制台的「归档」标签（在 `dsh-xi` 里），能按天翻归档、搜旧话、看最后写入时间。只读，改记忆还是改文件。
 
 不调模型、不跑定时任务、不衰减、不改你的记忆文件。
 
-控制台的数据来自三个只读接口（POST，和 dsh-xi 用同一条 connection 通道）：`/api/dsh-xi-memory/overview`、`/day?day=YYYY-MM-DD`、`/search?q=`。注册失败会写进 `~/.dsh/xi-memory.log`。
+「归档」标签的数据来自三个只读接口（POST，走和 dsh-xi 同一条 connection 通道）：`/api/dsh-xi-memory/overview`、`/day?day=YYYY-MM-DD`、`/search?q=`。注册失败会写进 `~/.dsh/xi-memory.log`。
 
 ## 配置
 

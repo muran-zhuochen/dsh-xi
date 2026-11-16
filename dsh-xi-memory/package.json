@@ -1,14 +1,13 @@
 {
   "name": "dsh-xi-memory",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
-  "description": "汐 · 记忆：归档对话、memory_find / memory_read、开场注入，带一个只读的记忆控制台页",
+  "description": "汐 · 记忆：归档对话、memory_find / memory_read、开场注入；归档页并进汐控制台的「归档」标签",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
-    "./client": "./client.js",
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg",
     "./package.json": "./package.json"
@@ -16,7 +15,6 @@
   "files": [
     "lib",
     "scripts",
-    "client.js",
     "locale/*.json",
     "icon.svg",
     "cordis.patch.yml",
@@ -25,9 +23,6 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
-    },
-    "client": {
-      "platform": "web"
     }
   }
 }

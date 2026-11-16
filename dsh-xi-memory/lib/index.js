@@ -247,7 +247,9 @@ export function apply(ctx, rawConfig) {
   let routesDone = false
   const registerRoutes = (c, label) => {
     if (routesDone) return
-    const face = (c.get ? c.get('connection') : c.connection)
+    const conn = (c.get ? c.get('connection') : c.connection)
+    // 注册面在 connection.fetch 上，不是 connection 本身。
+    const face = conn && conn.fetch
     if (face === undefined || typeof face.register !== 'function') {
       trace(`routes:${label} no-face`)
       return
