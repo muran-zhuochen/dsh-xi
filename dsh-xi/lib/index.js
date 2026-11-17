@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { buildState, resolveDataDir, resolvePersonaDir, DSH_HOME } from './state.js'
 import { initPersona, hasPersona } from './persona.js'
 import { runMigrations, PLUGIN_VERSION } from './upgrade.js'
+import * as OpenQQ from './openqq.js'
 
 export const name = 'dsh-xi'
 
@@ -38,6 +39,11 @@ export function apply(ctx, config) {
 
   const stateHandler = async () => json(buildState(ROOT, dataDir, personaDir))
 
+  const accessHandler = async () => {
+    const status = await OpenQQ.probe()
+    return json({ openqq: status, prefix: OpenQQ.PREFIX })
+  }
+
   const initHandler = async (request) => {
     if (hasPersona(personaDir)) return json({ ok: false, reason: 'has-persona' }, 409)
     const input = await readBody(request)
@@ -59,12 +65,29 @@ export function apply(ctx, config) {
     const routes = [
       ['/api/dsh-xi/state', 'POST', stateHandler],
       ['/api/dsh-xi/init', 'POST', initHandler],
+      ['/api/dsh-xi/access', 'GET', accessHandler],
+      [`${OpenQQ.PREFIX}`, 'GET', (request) => OpenQQ.proxy(request, '/')],
+      [`${OpenQQ.PREFIX}/app.js`, 'GET', (request) => OpenQQ.proxy(request, '/app.js')],
+      [`${OpenQQ.PREFIX}/styles.css`, 'GET', (request) => OpenQQ.proxy(request, '/styles.css')],
+      [`${OpenQQ.PREFIX}/theme.css`, 'GET', (request) => OpenQQ.proxy(request, '/theme.css')],
+      [`${OpenQQ.PREFIX}/logo.svg`, 'GET', (request) => OpenQQ.proxy(request, '/logo.svg')],
     ]
+    for (const apiPath of ['action', 'check', 'config', 'metrics', 'start', 'stream']) {
+      for (const method of ['GET', 'POST']) {
+        routes.push([`${OpenQQ.PREFIX}/api/${apiPath}`, method, (request) => OpenQQ.proxy(request, `/api/${apiPath}`)])
+      }
+    }
     try {
       c.effect(() => {
-        const offs = routes.map(([p, method, handler]) => face.register({
-          path: p, methods: [method], requestBody: 'buffered', fetch: handler,
-        }))
+        const offs = []
+        for (const [p, method, handler] of routes) {
+          try {
+            offs.push(face.register({ path: p, methods: [method], requestBody: 'buffered', fetch: handler }))
+          } catch (err) {
+            trace(`route-skip ${p} ${method}: ${err.message}`)
+          }
+        }
+        trace(`routes registered ${offs.length}/${routes.length}`)
         return () => offs.forEach((off) => typeof off === 'function' && off())
       }, 'dsh-xi: routes')
       done = true

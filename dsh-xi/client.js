@@ -350,14 +350,49 @@ window.__ModuleLoader__.load({
     }
 
     function Channels({ s }) {
-      const others = s.extensions.filter((x) => x.type === 'channel')
+      const [acc, setAcc] = use.useState(null)
+      use.useEffect(() => {
+        let alive = true
+        const load = () => {
+          fetch('/api/dsh-xi/access')
+            .then((r) => r.json())
+            .then((v) => { if (alive) setAcc(v) })
+            .catch(() => {})
+        }
+        load()
+        const timer = setInterval(load, 5000)
+        return () => { alive = false; clearInterval(timer) }
+      }, [])
+
+      const qq = acc && acc.openqq
+      const live = Boolean(qq && qq.webui)
+      const dot = (ok) => h('span', { style: { color: ok ? '#3fb950' : '#d29922', fontWeight: 700 } }, ok ? '● 在线' : '○ 离线')
+      const src = qq && qq.token ? acc.prefix + '#token=' + qq.token : (acc ? acc.prefix : '')
+
       return h('div', null,
-        h('div', { className: 'xi-note' },
-          '外部接入已清空。QQ 通道（dsh-xi-qq + NapCat）在 2026-11-16 整个移除，理由是第三方协议端有封号风险；以后也不再接。'),
-        others.length ? h('div', { className: 'xi-sect' }, '通道') : null,
-        others.length
-          ? Cards({ list: others })
-          : h('div', { className: 'xi-empty' }, '没有接入任何外部通道'))
+        h('div', { className: 'xi-card' },
+          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' } },
+            h('div', null,
+              h('div', { style: { fontSize: 16, fontWeight: 650 } }, 'Vesper QQ'),
+              h('div', { className: 'xi-dim', style: { marginTop: 4 } },
+                'OpenQQ（本机 OneBot v11）→ 只认主人一个号的私信')),
+            h('div', null, dot(live))),
+          h('div', { className: 'xi-dim', style: { marginTop: 10, lineHeight: 1.9 } },
+            '控制台：' + (live ? '在线' : '离线') + ' · 协议端 3001：' + (qq && qq.onebot ? '在听' : '没开') +
+            ' · 密钥：' + (qq && qq.token ? '已抓到' : '还没有') +
+            (qq && qq.pid ? ' · pid ' + qq.pid : '')),
+          h('div', { className: 'xi-dim', style: { marginTop: 6 } },
+            '离线就去 E:\\Ai-Agent\\快捷方式\\ 双击「启动QQ」；它起来会自动抓密钥，这一页 5 秒刷新一次。')),
+
+        live && src
+          ? h('iframe', {
+              key: src,
+              src,
+              title: 'OpenQQ 控制台',
+              style: { width: '100%', height: 'calc(100vh - 300px)', minHeight: 420, border: '1px solid var(--xi-line)', borderRadius: 12, marginTop: 14, background: '#fff' },
+            })
+          : h('div', { className: 'xi-empty', style: { marginTop: 14 } },
+              '控制台没开，嵌不了。先启动 QQ 通道。'))
     }
 
     function Media({ s }) {
