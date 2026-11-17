@@ -366,33 +366,43 @@ window.__ModuleLoader__.load({
 
       const qq = acc && acc.openqq
       const live = Boolean(qq && qq.webui)
-      const dot = (ok) => h('span', { style: { color: ok ? '#3fb950' : '#d29922', fontWeight: 700 } }, ok ? '● 在线' : '○ 离线')
       const src = qq && qq.tokenValue ? acc.prefix + '#token=' + qq.tokenValue : (acc ? acc.prefix : '')
 
-      return h('div', null,
-        h('div', { className: 'xi-card' },
-          h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' } },
-            h('div', null,
-              h('div', { style: { fontSize: 16, fontWeight: 650 } }, 'Vesper QQ'),
-              h('div', { className: 'xi-dim', style: { marginTop: 4 } },
-                'OpenQQ（本机 OneBot v11）→ 只认主人一个号的私信')),
-            h('div', null, dot(live))),
-          h('div', { className: 'xi-dim', style: { marginTop: 10, lineHeight: 1.9 } },
-            '控制台：' + (live ? '在线' : '离线') + ' · 协议端 3001：' + (qq && qq.onebot ? '在听' : '没开') +
-            ' · 密钥：' + (qq && qq.token ? '已抓到' : '还没有') +
-            (qq && qq.pid ? ' · pid ' + qq.pid : '')),
-          h('div', { className: 'xi-dim', style: { marginTop: 6 } },
-            '离线就去 E:\\Ai-Agent\\快捷方式\\ 双击「启动QQ」；它起来会自动抓密钥，这一页 5 秒刷新一次。')),
+      const stat = (label, value, note, tone) => h('div', { className: 'xi-card', key: label },
+        h('div', { className: 'xi-dim' }, label),
+        h('div', { className: 'xi-big ' + (tone || '') , style: { marginTop: 6 } }, value),
+        h('div', { className: 'xi-dim', style: { marginTop: 6 } }, note))
 
+      return h('div', null,
+        h('div', { className: 'xi-head' },
+          h('div', null,
+            h('div', { className: 'xi-title' }, '接入'),
+            h('div', { className: 'xi-sub' }, 'QQ 私信走 OpenQQ（本机 OneBot v11），控制台嵌在下面')),
+          h('div', { className: 'xi-right' },
+            h('span', { className: 'xi-chip' },
+              h('span', { className: 'xi-dot', style: { background: live ? 'var(--xi-accent)' : 'var(--xi-amber)' } }),
+              live ? 'Vesper QQ 在线' : 'Vesper QQ 离线'))),
+
+        h('div', { className: 'xi-sect' }, '通道'),
+        h('div', { className: 'xi-grid' },
+          stat('小号登录', qq && qq.phase === 'session_ready' ? '已登录' : (live ? '等登录' : '离线'),
+            '登录的是哪个号，下方控制台里看',
+            qq && qq.phase === 'session_ready' ? 'xi-accent' : 'xi-amber'),
+          stat('协议端 3001', qq && qq.onebot ? '在听' : '没开',
+            '我的插件从这个口收发', qq && qq.onebot ? 'xi-accent' : 'xi-amber'),
+          stat('控制台密钥', qq && qq.token ? '已抓到' : '还没', '每次启动换一把，页面自己拿')),
+
+        h('div', { className: 'xi-sect' }, '控制台'),
         live && src
-          ? h('iframe', {
-              key: src,
-              src,
-              title: 'OpenQQ 控制台',
-              style: { width: '100%', height: 'calc(100vh - 300px)', minHeight: 420, border: '1px solid var(--xi-line)', borderRadius: 12, marginTop: 14, background: '#fff' },
-            })
-          : h('div', { className: 'xi-empty', style: { marginTop: 14 } },
-              '控制台没开，嵌不了。先启动 QQ 通道。'))
+          ? h('div', { className: 'xi-card', style: { padding: 0, overflow: 'hidden' } },
+              h('iframe', {
+                key: src,
+                src,
+                title: 'OpenQQ 控制台',
+                style: { display: 'block', width: '100%', height: 'calc(100vh - 330px)', minHeight: 420, border: 0, background: '#fff' },
+              }))
+          : h('div', { className: 'xi-note' },
+              '控制台没开。去 E:\\Ai-Agent\\快捷方式\\ 双击「启动QQ」，起来之后这一页 5 秒内自己就会嵌上。'))
     }
 
     function Media({ s }) {
