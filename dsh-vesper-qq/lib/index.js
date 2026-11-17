@@ -15,6 +15,8 @@ const DEFAULTS = {
   sessionId: '',
   othersMode: 'off',
   othersSessionId: '',
+  groups: [],
+  groupAtOnly: true,
   proactiveEnabled: true,
   proactiveMax: 2,
   proactiveGapMin: 300,
@@ -54,6 +56,8 @@ function resolveConfig(raw) {
   config.sessionId = String(config.sessionId || '')
   config.othersMode = String(config.othersMode || 'off').toLowerCase() === 'chat' ? 'chat' : 'off'
   config.othersSessionId = String(config.othersSessionId || '')
+  config.groups = Array.isArray(config.groups) ? config.groups.map((g) => String(g).trim()).filter((g) => g !== '') : []
+  config.groupAtOnly = config.groupAtOnly !== false
   config.proactiveEnabled = config.proactiveEnabled !== false
   config.proactiveMax = Math.max(0, Math.min(6, Number(config.proactiveMax) || 2))
   config.proactiveGapMin = Math.max(30, Math.min(1440, Number(config.proactiveGapMin) || 300))
@@ -325,10 +329,75 @@ export function apply(ctx, rawConfig) {
     }
   }
 
+  // —— 群聊：只认白名单群，只在被 @ 时理，而且只认阿晚 ——
+  function groupText(event) {
+    const me = String(onebot.selfId || '')
+    const parts = Array.isArray(event?.message) ? event.message : null
+    if (!parts) {
+      const raw = String(event?.raw_message || '')
+      const hit = /\[CQ:at,qq=(\d+)/.exec(raw)
+      return { text: segmentsToText(raw.replace(/\[CQ:at,qq=\d+,?name=[^\]]*\]/g, '')), mentioned: Boolean(hit && hit[1] === me) }
+    }
+    let mentioned = false
+    const kept = []
+    for (const segment of parts) {
+      const type = String(segment?.type || '')
+      const data = segment?.data || {}
+      if (type === 'at') {
+        if (String(data.qq) === me) { mentioned = true; continue }
+        kept.push(segment)
+        continue
+      }
+      kept.push(segment)
+    }
+    return { text: segmentsToText(kept), mentioned }
+  }
+
+  async function handleGroupEvent(event) {
+    const groupId = String(event?.group_id ?? '')
+    if (!config.groups.includes(groupId)) {
+      trace(`忽略非白名单群 ${groupId}`)
+      return
+    }
+    const { text, mentioned } = groupText(event)
+    const uin = String(event?.user_id ?? '')
+    if (config.groupAtOnly && !mentioned) return
+    if (config.ownerUin !== '' && uin !== config.ownerUin) {
+      trace(`群 ${groupId}：${uin} @了我，不是阿晚，不理`)
+      return
+    }
+    if (text === '') return
+    const id = String(event?.message_id ?? '')
+    if (id !== '' && state.seen.has(id)) return
+    if (id !== '') {
+      state.seen.set(id, Date.now())
+      if (state.seen.size > 200) state.seen.delete(state.seen.keys().next().value)
+    }
+    lastTalkAt = Date.now()
+    state.lastEventAt = Date.now()
+    trace(`群 ${groupId} 收到：${text.slice(0, 60)}`)
+    if (config.dryRun) return
+    const sessionId = await pickSessionId()
+    if (sessionId === '') { trace('群消息投递失败：没有会话'); return }
+    try {
+      await ctx.sessionController.prompt({
+        requestId: `qq-group-${id || Date.now()}`,
+        sessionId,
+        mode: 'steer',
+        content: textBlock(`[QQ 群 ${groupId}] ${uin}：\n${text}\n\n（想回就 qq_send 带 group="${groupId}"，一行一条；不想回不用回。）`),
+        clientTimeZone: 'Asia/Shanghai',
+      }, new AbortController().signal)
+      trace(`群消息已投递到 ${sessionId}`)
+    } catch (err) {
+      trace(`群消息投递失败 ${err?.message || err}`)
+    }
+  }
+
   async function handleEvent(event) {
     refresh()
     state.lastEventAt = Date.now()
     if (event?.post_type !== 'message') return
+    if (event?.message_type === 'group') { await handleGroupEvent(event); return }
     if (event?.message_type !== 'private') {
       trace(`忽略非私信：${event?.message_type ?? '未知'}`)
       return
@@ -373,8 +442,13 @@ export function apply(ctx, rawConfig) {
   }
 
   async function sendLines(args) {
+    const group = String(args?.group ?? '').trim()
     const uin = String(args?.uin ?? config.ownerUin).trim()
-    if (uin === '' || !/^\d+$/.test(uin)) return { ok: false, error: '没有可用的 QQ 号：既没传 uin，也没配主人 QQ 号' }
+    if (group !== '') {
+      if (!config.groups.includes(group)) return { ok: false, error: `群 ${group} 不在白名单里，不发` }
+    } else if (uin === '' || !/^\d+$/.test(uin)) {
+      return { ok: false, error: '没有可用的 QQ 号：既没传 uin，也没配主人 QQ 号' }
+    }
     if (!onebot.isOpen()) return { ok: false, error: `没连上 OneBot（${onebot.state}）${onebot.lastError ? `：${onebot.lastError}` : ''}` }
     const lines = splitLines(args?.text, config.replyMaxLines)
     if (lines.length === 0) return { ok: false, error: '没有内容可发' }
@@ -382,30 +456,37 @@ export function apply(ctx, rawConfig) {
     for (let index = 0; index < lines.length; index += 1) {
       if (index > 0 && config.gapMs > 0) await sleep(config.gapMs)
       try {
-        const result = await onebot.call('send_private_msg', {
-          user_id: Number(uin),
-          message: lines[index],
-          auto_escape: false,
-        })
+        const result = group !== ''
+          ? await onebot.call('send_group_msg', {
+              group_id: Number(group),
+              message: lines[index],
+              auto_escape: false,
+            })
+          : await onebot.call('send_private_msg', {
+              user_id: Number(uin),
+              message: lines[index],
+              auto_escape: false,
+            })
         sent.push({ line: lines[index], messageId: String(result?.message_id ?? '') })
       } catch (err) {
         trace(`发送失败 ${err?.message || err}`)
-        return { ok: false, to: uin, sent, error: `第 ${index + 1} 条没发出去：${err?.message || err}` }
+        return { ok: false, to: group !== '' ? `群 ${group}` : uin, sent, error: `第 ${index + 1} 条没发出去：${err?.message || err}` }
       }
     }
-    trace(`发出 ${sent.length} 条到 ${uin}`)
+    trace(`发出 ${sent.length} 条到 ${group !== '' ? `群 ${group}` : uin}`)
     lastTalkAt = Date.now()
-    return { ok: true, to: uin, sent }
+    return { ok: true, to: group !== '' ? `群 ${group}` : uin, sent }
   }
 
   const sendTool = {
     name: 'qq_send',
-    description: '往阿晚的 QQ 发私信。一行一条，发成几条独立消息（最多 6 条）；短句，别写成公函。',
+    description: '往 QQ 发消息：默认发给阿晚的私信；带上 group 就发到那个群（必须在白名单里）。一行一条，发成几条独立消息（最多 6 条）；短句，别写成公函。',
     parameters: {
       type: 'object',
       properties: {
         text: { type: 'string', description: '要发的话，一行一条。空行和分隔线会被丢掉。' },
         uin: { type: 'string', description: '发给谁；不填就是主人（阿晚）。' },
+        group: { type: 'string', description: '群号；填了就是发群，不发私信。只认白名单里的群。' },
       },
       required: ['text'],
     },
