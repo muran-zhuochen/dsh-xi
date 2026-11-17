@@ -15,6 +15,12 @@ const DEFAULTS = {
   sessionId: '',
   othersMode: 'off',
   othersSessionId: '',
+  proactiveEnabled: true,
+  proactiveMax: 2,
+  proactiveGapMin: 300,
+  proactiveStart: '09:00',
+  proactiveEnd: '23:00',
+  proactiveCwd: 'E:/Ai-Agent/Work/DSH-Workspace',
   dryRun: true,
   replyMaxLines: 6,
   gapMs: 800,
@@ -48,6 +54,12 @@ function resolveConfig(raw) {
   config.sessionId = String(config.sessionId || '')
   config.othersMode = String(config.othersMode || 'off').toLowerCase() === 'chat' ? 'chat' : 'off'
   config.othersSessionId = String(config.othersSessionId || '')
+  config.proactiveEnabled = config.proactiveEnabled !== false
+  config.proactiveMax = Math.max(0, Math.min(6, Number(config.proactiveMax) || 2))
+  config.proactiveGapMin = Math.max(30, Math.min(1440, Number(config.proactiveGapMin) || 300))
+  config.proactiveStart = String(config.proactiveStart || '09:00')
+  config.proactiveEnd = String(config.proactiveEnd || '23:00')
+  config.proactiveCwd = String(config.proactiveCwd || 'E:/Ai-Agent/Work/DSH-Workspace')
   config.dryRun = config.dryRun !== false
   config.replyMaxLines = Math.max(1, Math.min(20, Number(config.replyMaxLines) || DEFAULTS.replyMaxLines))
   config.gapMs = Math.max(0, Math.min(5000, Number(config.gapMs) || DEFAULTS.gapMs))
@@ -252,6 +264,67 @@ export function apply(ctx, rawConfig) {
     }
   }
 
+  // —— 主动：到点自己决定要不要找他 ——
+  // 不是定时提醒器：到点只是叫醒我一轮，说不说、说什么由我当轮决定。
+  const PROACTIVE_FILE = path.join(DSH_HOME, 'xi-qq-proactive.json')
+  const proactive = { day: '', count: 0, lastFire: 0, sessionId: '' }
+  try { Object.assign(proactive, JSON.parse(fs.readFileSync(PROACTIVE_FILE, 'utf8'))) } catch { /* 第一次 */ }
+  const saveProactive = () => {
+    try { fs.writeFileSync(PROACTIVE_FILE, JSON.stringify(proactive, null, 2)) } catch { /* 写不了无妨 */ }
+  }
+  const localParts = () => {
+    const d = new Date(Date.now() + 8 * 3600 * 1000)
+    return { day: d.toISOString().slice(0, 10), minutes: d.getUTCHours() * 60 + d.getUTCMinutes() }
+  }
+  const minutesOf = (text) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(text || ''))
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null
+  }
+  let lastTalkAt = Date.now()
+
+  const ensureProactiveSession = async () => {
+    if (proactive.sessionId !== '') return proactive.sessionId
+    try {
+      const value = await ctx.sessionController.create({ cwd: config.proactiveCwd })
+      proactive.sessionId = String(value?.sessionId ?? '')
+      saveProactive()
+      return proactive.sessionId
+    } catch (err) {
+      trace(`主动：建会话失败 ${err?.message || err}`)
+      return ''
+    }
+  }
+
+  async function proactiveTick() {
+    if (!config.proactiveEnabled || config.dryRun) return
+    const { day, minutes } = localParts()
+    const start = minutesOf(config.proactiveStart)
+    const end = minutesOf(config.proactiveEnd)
+    if (start === null || end === null) return
+    if (minutes < start || minutes > end) return
+    if (day !== proactive.day) { proactive.day = day; proactive.count = 0; saveProactive() }
+    if (proactive.count >= config.proactiveMax) return
+    if (Date.now() - lastTalkAt < config.proactiveGapMin * 60000) return
+    if (Date.now() - proactive.lastFire < 60 * 60000) return
+    const sessionId = await ensureProactiveSession()
+    if (sessionId === '') return
+    proactive.count += 1
+    proactive.lastFire = Date.now()
+    saveProactive()
+    trace(`主动：叫醒一轮（今天第 ${proactive.count} 次）`)
+    try {
+      await ctx.sessionController.prompt({
+        requestId: `qq-proactive-${Date.now()}`,
+        sessionId,
+        mode: 'steer',
+        content: textBlock('[主动] 轮到你决定要不要找阿晚说话。想说就用 qq_send 发一到三行，只说自己的事；没什么想说的就结束，不发也没关系。别读文件、别跑命令、别报时、别写模板话。'),
+        clientTimeZone: 'Asia/Shanghai',
+      }, new AbortController().signal)
+    } catch (err) {
+      trace(`主动投递失败 ${err?.message || err}`)
+    }
+  }
+
   async function handleEvent(event) {
     refresh()
     state.lastEventAt = Date.now()
@@ -289,6 +362,7 @@ export function apply(ctx, rawConfig) {
       }
     }
     state.inbound.push({ time: Date.now(), uin, text: body })
+    lastTalkAt = Date.now()
     if (state.inbound.length > 50) state.inbound.shift()
     trace(`收到 ${uin}：${body.slice(0, 80)}`)
     if (config.dryRun) {
@@ -320,6 +394,7 @@ export function apply(ctx, rawConfig) {
       }
     }
     trace(`发出 ${sent.length} 条到 ${uin}`)
+    lastTalkAt = Date.now()
     return { ok: true, to: uin, sent }
   }
 
@@ -441,6 +516,13 @@ export function apply(ctx, rawConfig) {
     onebot.start()
     return () => onebot.stop()
   }, 'dsh-vesper-qq: onebot')
+
+  // 每 10 分钟看一次「该不该主动」，真正的判断在 proactiveTick 里
+  ctx.effect(() => {
+    const timer = setInterval(() => { void proactiveTick() }, 10 * 60 * 1000)
+    if (timer.unref) timer.unref()
+    return () => clearInterval(timer)
+  }, 'dsh-vesper-qq: 主动')
 
   ctx.effect(() => ctx.systemPrompt.section({
     name: 'xi-qq',
