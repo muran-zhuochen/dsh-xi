@@ -153,22 +153,34 @@ export function apply(ctx, rawConfig) {
   refresh()
   onebot.beforeConnect = refresh
 
+  // 会话轮换：日常聊在专用的短会话里，一天一换。
+  // 一直用同一个长会话，每句话都要把前文重读一遍，是最贵的那种花法。
+  const SESSION_FILE = path.join(DSH_HOME, 'xi-qq-session.json')
+  const sessionState = { day: '', sessionId: '' }
+  try { Object.assign(sessionState, JSON.parse(fs.readFileSync(SESSION_FILE, 'utf8'))) } catch { /* 第一次 */ }
+  const saveSessionState = () => {
+    try { fs.writeFileSync(SESSION_FILE, JSON.stringify(sessionState, null, 2)) } catch { /* 写不了无妨 */ }
+  }
+  const dayKeyLocal = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10)
+
   async function pickSessionId() {
     if (config.sessionId !== '') return config.sessionId
-    const controller = new AbortController()
+    const day = dayKeyLocal()
+    if (sessionState.sessionId !== '' && sessionState.day === day) return sessionState.sessionId
     try {
-      const value = await ctx.sessionController.list({}, controller.signal)
-      const items = (value?.items || []).filter((item) => (
-        item?.origin !== 'subagent'
-        && item?.blank !== true
-        && item?.agentAvailable !== false
-      ))
-      items.sort((a, b) => Number(b?.updatedAt ?? 0) - Number(a?.updatedAt ?? 0))
-      return String(items[0]?.sessionId ?? '')
+      const value = await ctx.sessionController.create({ cwd: config.proactiveCwd })
+      const fresh = String(value?.sessionId ?? '')
+      if (fresh !== '') {
+        sessionState.sessionId = fresh
+        sessionState.day = day
+        saveSessionState()
+        trace(`换新会话 ${fresh}（${day}）`)
+        return fresh
+      }
     } catch (err) {
-      trace(`列会话失败 ${err?.message || err}`)
-      return ''
+      trace(`建会话失败 ${err?.message || err}`)
     }
+    return sessionState.sessionId
   }
 
   // 投递之后回头看一眼：万一那一轮没跑起来（进过队列没被叫醒），再踢一次。
@@ -294,18 +306,8 @@ export function apply(ctx, rawConfig) {
   }
   let lastTalkAt = Date.now()
 
-  const ensureProactiveSession = async () => {
-    if (proactive.sessionId !== '') return proactive.sessionId
-    try {
-      const value = await ctx.sessionController.create({ cwd: config.proactiveCwd })
-      proactive.sessionId = String(value?.sessionId ?? '')
-      saveProactive()
-      return proactive.sessionId
-    } catch (err) {
-      trace(`主动：建会话失败 ${err?.message || err}`)
-      return ''
-    }
-  }
+  // 主动也用同一个轮换会话，不再单开一个
+  const ensureProactiveSession = () => pickSessionId()
 
   async function proactiveTick() {
     if (!config.proactiveEnabled || config.dryRun) return
