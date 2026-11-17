@@ -20,6 +20,21 @@ export class OneBot {
     this.selfId = ''
     this.lastError = ''
     this.connectedAt = 0
+    this.heartbeat = null
+  }
+
+  startHeartbeat() {
+    this.stopHeartbeat()
+    // OpenQQ 的空闲连接大约 60 秒就会被踢，隔 20 秒打个招呼把它续住
+    this.heartbeat = setInterval(() => {
+      if (!this.isOpen()) return
+      this.call('get_login_info', {}, 5000).catch(() => { /* 心跳失败无所谓 */ })
+    }, 20000)
+    if (this.heartbeat.unref) this.heartbeat.unref()
+  }
+
+  stopHeartbeat() {
+    if (this.heartbeat !== null) { clearInterval(this.heartbeat); this.heartbeat = null }
   }
 
   isOpen() {
@@ -41,6 +56,7 @@ export class OneBot {
   stop() {
     this.stopped = true
     this.state = 'stopped'
+    this.stopHeartbeat()
     if (this.retryTimer !== null) { clearTimeout(this.retryTimer); this.retryTimer = null }
     try { this.ws?.close() } catch { /* 已经关了 */ }
     this.ws = null
@@ -59,7 +75,8 @@ export class OneBot {
     if (this.stopped) return
     if (this.retryTimer !== null) return
     this.attempt += 1
-    const delay = Math.min(30000, 1000 * 2 ** Math.min(5, this.attempt - 1))
+    // 断线要快点回来：1s、2s、4s，最多 8s。断着的时候消息就是丢了。
+    const delay = Math.min(8000, 1000 * 2 ** Math.min(3, this.attempt - 1))
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null
       this.connect()
@@ -95,6 +112,7 @@ export class OneBot {
       this.connectedAt = Date.now()
       this.lastError = ''
       this.log(`连上 ${this.url}`)
+      this.startHeartbeat()
       this.call('get_login_info')
         .then((info) => {
           this.selfId = String(info?.user_id ?? '')
@@ -117,6 +135,7 @@ export class OneBot {
       if (this.ws !== ws) return
       const wasOpen = this.state === 'open'
       this.state = 'closed'
+      this.stopHeartbeat()
       this.ws = null
       this.failAll('连接断开')
       if (this.stopped) return
