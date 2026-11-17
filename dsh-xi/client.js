@@ -733,28 +733,12 @@ window.__ModuleLoader__.load({
         h('path', { d: 'M3 19.5c3 0 3-2 6-2s3 2 6 2 3-2 6-2' }))
     }
 
-    // 边栏「QQ」：点一下就新标签打开 OpenQQ 控制台（iframe 嵌不了时的手边入口）
-    // 先开空白页再填地址，这样不会被浏览器的弹窗拦截。
-    function openConsoleTab() {
-      const win = window.open('about:blank', '_blank')
-      fetch('/api/dsh-xi/access')
-        .then((r) => r.json())
-        .then((v) => {
-          const qq = v && v.openqq
-          const url = qq && qq.tokenValue ? v.prefix + '#token=' + qq.tokenValue : (v ? v.prefix : '')
-          if (win && !win.closed) win.location.href = url
-          else window.open(url, '_blank')
-        })
-        .catch(() => { try { if (win && !win.closed) win.close() } catch { /* 关不掉算了 */ } })
-    }
-
+    // 边栏「QQ」：点图标就在主面板里显示控制台（Electron 里 window.open 会被拦，不指望新标签）
     function QqIcon(props) {
       const size = typeof props.size === 'number' ? props.size : 18
       return h('svg', {
         width: size, height: size, viewBox: '0 0 24 24', fill: 'none',
         stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round',
-        style: { cursor: 'pointer' },
-        onClick: (event) => { if (event && event.stopPropagation) event.stopPropagation(); openConsoleTab() },
       },
         h('path', { d: 'M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8A2.5 2.5 0 0 1 17.5 17H10l-4.5 3.5V17H6.5A2.5 2.5 0 0 1 4 14.5Z' }))
     }
@@ -763,36 +747,51 @@ window.__ModuleLoader__.load({
       const [acc, setAcc] = use.useState(null)
       use.useEffect(() => {
         let alive = true
-        fetch('/api/dsh-xi/access')
-          .then((r) => r.json())
-          .then((v) => { if (alive) setAcc(v) })
-          .catch(() => {})
-        return () => { alive = false }
+        const load = () => {
+          fetch('/api/dsh-xi/access')
+            .then((r) => r.json())
+            .then((v) => { if (alive) setAcc(v) })
+            .catch(() => {})
+        }
+        load()
+        const timer = setInterval(load, 5000)
+        return () => { alive = false; clearInterval(timer) }
       }, [])
       const qq = acc && acc.openqq
       const live = Boolean(qq && qq.webui)
+      const src = qq && qq.tokenValue ? acc.prefix + '#token=' + qq.tokenValue : (acc ? acc.prefix : '')
+      const injectPaint = (doc) => {
+        try {
+          if (!doc || !doc.head || doc.getElementById('xi-console-paint')) return
+          const style = doc.createElement('style')
+          style.id = 'xi-console-paint'
+          style.textContent = ':root{--chart-1:#1f9d8f;--chart-2:#7c5cd6}'
+          doc.head.appendChild(style)
+        } catch { /* 算了 */ }
+      }
       return h('div', { className: 'xi-root' },
         h('div', { className: 'xi-head' },
           h('div', null,
             h('div', { className: 'xi-title' }, 'Vesper QQ'),
-            h('div', { className: 'xi-sub' }, '控制台独立开一个标签，不占这块地方')),
+            h('div', { className: 'xi-sub' }, '控制台就在这儿，不用跳标签')),
           h('div', { className: 'xi-right' },
             h('span', { className: 'xi-chip' },
               h('span', { className: 'xi-dot', style: { background: live ? 'var(--xi-accent)' : 'var(--xi-amber)' } }),
-              live ? '在线' : '离线'))),
-        h('div', { className: 'xi-grid' },
-          h('div', { className: 'xi-card' },
-            h('div', { className: 'xi-dim' }, '控制台'),
-            h('div', { className: 'xi-big ' + (live ? 'xi-accent' : 'xi-amber'), style: { marginTop: 6 } }, live ? '可以打开' : '没开'),
-            h('div', { className: 'xi-dim', style: { marginTop: 6 } }, live ? '点下面的按钮，新标签里就是完整控制台' : '先去快捷方式里双击「启动QQ」'),
-            h('button', {
-              className: 'xi-btn',
-              disabled: !live,
-              style: { marginTop: 12, borderColor: 'var(--xi-accent)', color: 'var(--xi-accent)' },
-              onClick: openConsoleTab,
-            }, '打开控制台 ↗'))),
-        h('div', { className: 'xi-note', style: { marginTop: 16 } },
-          '钥匙每次启动换一把，按钮会自己去取，不用你抄。'))
+              live ? '在线' : '离线'),
+            live && src
+              ? h('a', { href: src, target: '_blank', rel: 'noopener', className: 'xi-sub', style: { color: 'var(--xi-accent)', textDecoration: 'none' } }, '新窗口 ↗')
+              : null)),
+        live && src
+          ? h('div', { className: 'xi-card', style: { padding: 0, overflow: 'hidden' } },
+              h('iframe', {
+                key: src,
+                src,
+                title: 'OpenQQ 控制台',
+                onLoad: (event) => injectPaint(event && event.target && event.target.contentDocument),
+                style: { display: 'block', width: '100%', height: 'calc(100vh - 190px)', minHeight: 420, border: 0, background: '#fff' },
+              }))
+          : h('div', { className: 'xi-note' },
+              '控制台没开。去 E:\\Ai-Agent\\快捷方式\\ 双击「启动QQ」，起来之后这一页 5 秒内自己会连上。'))
     }
 
     function apply(ctx) {
