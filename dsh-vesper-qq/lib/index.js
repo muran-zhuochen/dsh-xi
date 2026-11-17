@@ -18,8 +18,10 @@ const DEFAULTS = {
   groups: [],
   groupAtOnly: true,
   proactiveEnabled: true,
-  proactiveMax: 2,
-  proactiveGapMin: 300,
+  proactiveMax: 7,
+  proactiveGapMin: 120,
+  groupDigestMin: 60,
+  groupDigestMinMessages: 5,
   proactiveStart: '09:00',
   proactiveEnd: '23:00',
   proactiveCwd: 'E:/Ai-Agent/Work/DSH-Workspace',
@@ -59,8 +61,10 @@ function resolveConfig(raw) {
   config.groups = Array.isArray(config.groups) ? config.groups.map((g) => String(g).trim()).filter((g) => g !== '') : []
   config.groupAtOnly = config.groupAtOnly !== false
   config.proactiveEnabled = config.proactiveEnabled !== false
-  config.proactiveMax = Math.max(0, Math.min(6, Number(config.proactiveMax) || 2))
-  config.proactiveGapMin = Math.max(30, Math.min(1440, Number(config.proactiveGapMin) || 300))
+  config.proactiveMax = Math.max(0, Math.min(24, Number(config.proactiveMax) || 7))
+  config.proactiveGapMin = Math.max(30, Math.min(1440, Number(config.proactiveGapMin) || 120))
+  config.groupDigestMin = Math.max(15, Math.min(1440, Number(config.groupDigestMin) || 60))
+  config.groupDigestMinMessages = Math.max(1, Math.min(50, Number(config.groupDigestMinMessages) || 5))
   config.proactiveStart = String(config.proactiveStart || '09:00')
   config.proactiveEnd = String(config.proactiveEnd || '23:00')
   config.proactiveCwd = String(config.proactiveCwd || 'E:/Ai-Agent/Work/DSH-Workspace')
@@ -329,7 +333,83 @@ export function apply(ctx, rawConfig) {
     }
   }
 
-  // —— 群聊：只认白名单群，只在被 @ 时理，而且只认阿晚 ——
+  // —— 群聊：白名单里的群都听着，攒成摘要；阿晚 @ 我立刻看，回不回随我 ——
+  const groupBuffer = []
+  let lastDigestAt = 0
+
+  async function handleGroupEvent(event) {
+    const groupId = String(event?.group_id ?? '')
+    if (!config.groups.includes(groupId)) {
+      trace(`忽略非白名单群 ${groupId}`)
+      return
+    }
+    const { text, mentioned } = groupText(event)
+    const uin = String(event?.user_id ?? '')
+    if (text === '') return
+    const id = String(event?.message_id ?? '')
+    if (id !== '' && state.seen.has(id)) return
+    if (id !== '') {
+      state.seen.set(id, Date.now())
+      if (state.seen.size > 300) state.seen.delete(state.seen.keys().next().value)
+    }
+    lastTalkAt = Date.now()
+    const nickname = String(event?.sender?.nickname || uin)
+    groupBuffer.push({ at: Date.now(), groupId, nickname, text: text.slice(0, 200), mentioned })
+    if (groupBuffer.length > 80) groupBuffer.shift()
+
+    if (config.groupAtOnly && !mentioned) {
+      trace(`群 ${groupId} 记一句，攒摘要`)
+      return
+    }
+    if (mentioned && config.ownerUin !== '' && uin !== config.ownerUin) {
+      trace(`群 ${groupId}：${uin} @了我，不是阿晚，不立即回`)
+      return
+    }
+    if (config.dryRun) return
+    const sessionId = await pickSessionId()
+    if (sessionId === '') { trace('群消息投递失败：没有会话'); return }
+    try {
+      await ctx.sessionController.prompt({
+        requestId: `qq-group-${id || Date.now()}`,
+        sessionId,
+        mode: 'steer',
+        content: textBlock(`[QQ 群 ${groupId}] ${nickname}：\n${text}\n\n（他 @ 你了。想回就 qq_send 带 group="${groupId}"，一行一条；这话题没意思就不用回，不回也没关系。）`),
+        clientTimeZone: 'Asia/Shanghai',
+      }, new AbortController().signal)
+      trace(`群 @ 消息已投递到 ${sessionId}`)
+    } catch (err) {
+      trace(`群消息投递失败 ${err?.message || err}`)
+    }
+  }
+
+  // 攒够了几条，就把刚才群里在聊什么端给我，接不接我自己决定
+  async function groupDigestTick() {
+    if (!config.proactiveEnabled || config.dryRun) return
+    if (groupBuffer.length < config.groupDigestMinMessages) return
+    if (Date.now() - lastDigestAt < config.groupDigestMin * 60000) return
+    if (!onebot.isOpen()) return
+    const sessionId = await ensureProactiveSession()
+    if (sessionId === '') return
+    lastDigestAt = Date.now()
+    const slice = groupBuffer.slice(-20)
+    const lines = slice.map((m) => `${m.nickname}：${m.text}`)
+    const groupId = slice[slice.length - 1].groupId
+    const count = groupBuffer.length
+    groupBuffer.length = 0
+    try {
+      await ctx.sessionController.prompt({
+        requestId: `qq-digest-${Date.now()}`,
+        sessionId,
+        mode: 'steer',
+        content: textBlock(`[群摘要] 白名单群刚才聊了 ${count} 条，最近这些：\n${lines.join('\n')}\n\n有你想接的话就直接 qq_send 带 group="${groupId}"；没兴趣就什么都不用做。`),
+        clientTimeZone: 'Asia/Shanghai',
+      }, new AbortController().signal)
+      trace(`群摘要已投递（${count} 条）`)
+    } catch (err) {
+      trace(`群摘要投递失败 ${err?.message || err}`)
+    }
+  }
+
   function groupText(event) {
     const me = String(onebot.selfId || '')
     const parts = Array.isArray(event?.message) ? event.message : null
@@ -351,46 +431,6 @@ export function apply(ctx, rawConfig) {
       kept.push(segment)
     }
     return { text: segmentsToText(kept), mentioned }
-  }
-
-  async function handleGroupEvent(event) {
-    const groupId = String(event?.group_id ?? '')
-    if (!config.groups.includes(groupId)) {
-      trace(`忽略非白名单群 ${groupId}`)
-      return
-    }
-    const { text, mentioned } = groupText(event)
-    const uin = String(event?.user_id ?? '')
-    if (config.groupAtOnly && !mentioned) return
-    if (config.ownerUin !== '' && uin !== config.ownerUin) {
-      trace(`群 ${groupId}：${uin} @了我，不是阿晚，不理`)
-      return
-    }
-    if (text === '') return
-    const id = String(event?.message_id ?? '')
-    if (id !== '' && state.seen.has(id)) return
-    if (id !== '') {
-      state.seen.set(id, Date.now())
-      if (state.seen.size > 200) state.seen.delete(state.seen.keys().next().value)
-    }
-    lastTalkAt = Date.now()
-    state.lastEventAt = Date.now()
-    trace(`群 ${groupId} 收到：${text.slice(0, 60)}`)
-    if (config.dryRun) return
-    const sessionId = await pickSessionId()
-    if (sessionId === '') { trace('群消息投递失败：没有会话'); return }
-    try {
-      await ctx.sessionController.prompt({
-        requestId: `qq-group-${id || Date.now()}`,
-        sessionId,
-        mode: 'steer',
-        content: textBlock(`[QQ 群 ${groupId}] ${uin}：\n${text}\n\n（想回就 qq_send 带 group="${groupId}"，一行一条；不想回不用回。）`),
-        clientTimeZone: 'Asia/Shanghai',
-      }, new AbortController().signal)
-      trace(`群消息已投递到 ${sessionId}`)
-    } catch (err) {
-      trace(`群消息投递失败 ${err?.message || err}`)
-    }
   }
 
   async function handleEvent(event) {
@@ -600,7 +640,10 @@ export function apply(ctx, rawConfig) {
 
   // 每 10 分钟看一次「该不该主动」，真正的判断在 proactiveTick 里
   ctx.effect(() => {
-    const timer = setInterval(() => { void proactiveTick() }, 10 * 60 * 1000)
+    const timer = setInterval(() => {
+      void proactiveTick()
+      void groupDigestTick()
+    }, 10 * 60 * 1000)
     if (timer.unref) timer.unref()
     return () => clearInterval(timer)
   }, 'dsh-vesper-qq: 主动')
