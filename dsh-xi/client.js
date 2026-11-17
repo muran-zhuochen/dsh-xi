@@ -296,9 +296,18 @@ window.__ModuleLoader__.load({
           h('div', { className: 'xi-card' },
             h('h4', null, '最近 7 天'),
             h('div', { className: 'xi-bars' },
-              hist.map((x) => h('div', { className: 'b', key: x.date },
-                h('i', { style: { height: Math.max(3, (x.amount / max) * 100) + '%' } }),
-                h('span', null, x.date.slice(5))))))),
+              hist.map((x) => {
+                const ratio = x.amount / 1
+                const tone = ratio >= 1 ? 'rose' : ratio >= 0.66 ? 'amber' : ratio >= 0.33 ? 'violet' : 'accent'
+                return h('div', { className: 'b', key: x.date, title: x.date + ' · ' + money(x.amount) },
+                  h('i', { style: { height: Math.max(3, (x.amount / max) * 100) + '%', background: 'var(--xi-' + tone + ')' } }),
+                  h('span', null, x.date.slice(5)))
+              })),
+            h('div', { className: 'xi-kv', style: { marginTop: 12, gap: 8 } },
+              [['accent', '轻'], ['violet', '过半'], ['amber', '近红线'], ['rose', '超红线']].map(([tone, label]) =>
+                h('span', { className: 'xi-chip', key: tone },
+                  h('span', { className: 'xi-dot', style: { background: 'var(--xi-' + tone + ')' } }),
+                  label))))),
         h('div', { className: 'xi-sect' }, '预算规则 · BUDGET.md'),
         h('div', { className: 'xi-card' },
           h('pre', { className: 'xi-pre' },
