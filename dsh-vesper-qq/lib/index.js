@@ -20,7 +20,7 @@ const DEFAULTS = {
   proactiveEnabled: true,
   proactiveMax: 14,
   proactiveGapMin: 60,
-  groupDigestMin: 30,
+  groupDigestMin: 60,
   groupDigestMinMessages: 3,
   proactiveStart: '09:00',
   proactiveEnd: '23:00',
