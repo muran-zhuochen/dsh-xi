@@ -345,7 +345,38 @@ export function apply(ctx, rawConfig) {
   // —— 群聊：白名单里的群都听着，攒成摘要；阿晚 @ 我立刻看，回不回随我 ——
   const groupBuffer = []
   const groupTalkAt = new Map()
+  const groupPending = new Map()
   let lastDigestAt = 0
+
+  // 同一个人连着发几句：先攒起来，几秒没新话再一起投，别一句一次地叫醒我
+  async function deliverGroupLines(groupId, nickname, text, mentioned) {
+    if (config.dryRun) return
+    const sessionId = await pickSessionId()
+    if (sessionId === '') { trace('群消息投递失败：没有会话'); return }
+    try {
+      await ctx.sessionController.prompt({
+        requestId: `qq-group-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`,
+        sessionId,
+        mode: 'steer',
+        content: textBlock(`[QQ 群 ${groupId}] ${nickname}${mentioned ? '（@ 了你）' : ''}：\n${text}\n\n（这个群你随便聊。想接就 qq_send 带 group="${groupId}"，一行一条；不想接就不用接。）`),
+        clientTimeZone: 'Asia/Shanghai',
+      }, new AbortController().signal)
+      trace(`群 ${groupId} 投递（${text.split('\n').length} 行）`)
+      groupTalkAt.set(groupId, Date.now())
+    } catch (err) {
+      trace(`群消息投递失败 ${err?.message || err}`)
+    }
+  }
+
+  function flushGroupPending(key) {
+    const entry = groupPending.get(key)
+    if (!entry) return
+    groupPending.delete(key)
+    if (entry.timer) clearTimeout(entry.timer)
+    const text = entry.lines.join('\n').trim()
+    if (text === '') return
+    void deliverGroupLines(entry.groupId, entry.nickname, text, entry.mentioned)
+  }
 
   async function handleGroupEvent(event) {
     const groupId = String(event?.group_id ?? '')
@@ -369,24 +400,23 @@ export function apply(ctx, rawConfig) {
     groupBuffer.push({ at: Date.now(), groupId, nickname, text: text.slice(0, 200), mentioned })
     if (groupBuffer.length > 80) groupBuffer.shift()
 
-    // 「放开的群」：每条都投，不 @ 也聊；其他群仍按 @ / 摘要的规矩
+    // 「放开的群」：按人攒着，几秒没新话一起投；@ 我立刻投
     const unlimitedGroup = config.groupUnlimited.includes(groupId)
     if (unlimitedGroup) {
-      if (config.dryRun) return
-      const sessionId = await pickSessionId()
-      if (sessionId === '') { trace('群消息投递失败：没有会话'); return }
-      try {
-        await ctx.sessionController.prompt({
-          requestId: `qq-group-${id || Date.now()}`,
-          sessionId,
-          mode: 'steer',
-          content: textBlock(`[QQ 群 ${groupId}] ${nickname}${mentioned ? '（@ 了你）' : ''}：\n${text}\n\n（这个群你随便聊。想接就 qq_send 带 group="${groupId}"，一行一条；不想接就不用接。）`),
-          clientTimeZone: 'Asia/Shanghai',
-        }, new AbortController().signal)
-        trace(`群 ${groupId} 直接投递（放开模式）`)
-        groupTalkAt.set(groupId, Date.now())
-      } catch (err) {
-        trace(`群消息投递失败 ${err?.message || err}`)
+      const key = `${groupId}:${uin}`
+      const entry = groupPending.get(key) || { groupId, uin, nickname, lines: [], mentioned: false, timer: null }
+      entry.nickname = nickname
+      entry.lines.push(text)
+      entry.mentioned = entry.mentioned || mentioned
+      if (entry.timer) clearTimeout(entry.timer)
+      if (entry.lines.length >= 8 || mentioned) {
+        groupPending.set(key, entry)
+        trace(`群 ${groupId} ${nickname} 攒够 ${entry.lines.length} 条${mentioned ? '（@ 我，立刻投）' : ''}`)
+        flushGroupPending(key)
+      } else {
+        entry.timer = setTimeout(() => flushGroupPending(key), 4000)
+        groupPending.set(key, entry)
+        trace(`群 ${groupId} ${nickname} 攒 ${entry.lines.length} 条，等 4 秒`)
       }
       return
     }
