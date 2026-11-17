@@ -9,6 +9,7 @@
 
 import http from 'node:http'
 import crypto from 'node:crypto'
+import path from 'node:path'
 
 const PORT = Number(process.env.PORT || 3001)
 const TOKEN = process.env.TOKEN || ''
@@ -45,15 +46,50 @@ function broadcast(object) {
   }
 }
 
-function event(from, text) {
+// 假的合并转发：get_forward_msg 要返回这个结构，插件才会往下摊
+const FORWARD_NODES = [
+  { time: 1761000000, sender: { nickname: '阿晚', user_id: 20002 }, message: [{ type: 'text', data: { text: '在吗' } }] },
+  { time: 1761000060, sender: { nickname: '汐', user_id: 10001 }, message: [{ type: 'text', data: { text: '在，怎么了' } }] },
+  {
+    time: 1761000120,
+    sender: { nickname: '阿晚', user_id: 20002 },
+    message: [
+      { type: 'text', data: { text: '看看这段记录' } },
+      { type: 'image', data: { file: 'x.jpg' } },
+      // 真机上嵌套的转发会直接摊在 content 里；插件要用这份，不能再去问服务器
+      {
+        type: 'forward',
+        data: {
+          id: 'nested-1',
+          content: [
+            { time: 1761000200, sender: { nickname: '路人甲', user_id: 30003 }, message: [{ type: 'text', data: { text: '套在里面的' } }] },
+          ],
+        },
+      },
+    ],
+  },
+  {
+    time: 1761000300,
+    sender: { nickname: '长文', user_id: 40004 },
+    // 超过 maxInboundChars(2000)：验证转发不会被普通消息上限再切一刀
+    message: [{ type: 'text', data: { text: `长文开始${'L'.repeat(4000)}长文结束` } }],
+  },
+]
+
+function event(from, text, imagePath = '') {
   nextMessageId += 1
+  const message = []
+  if (text !== '') message.push({ type: 'text', data: { text } })
+  if (imagePath !== '') {
+    message.push({ type: 'image', data: { file: path.basename(imagePath), file_id: 'fake-file-id', path: imagePath, url: '' } })
+  }
   return {
     post_type: 'message',
     message_type: 'private',
     sub_type: 'friend',
     self_id: SELF_ID,
     user_id: from,
-    message: [{ type: 'text', data: { text } }],
+    message,
     raw_message: text,
     font: 0,
     sender: { user_id: from, nickname: '测试主人' },
@@ -68,6 +104,10 @@ function onAction(client, raw) {
   const { action, params = {}, echo } = request ?? {}
   if (action === 'get_login_info') {
     client.socket.write(frame(JSON.stringify({ status: 'ok', retcode: 0, data: { user_id: SELF_ID, nickname: 'fake-bot' }, echo })))
+    return
+  }
+  if (action === 'get_forward_msg') {
+    client.socket.write(frame(JSON.stringify({ status: 'ok', retcode: 0, data: { messages: FORWARD_NODES }, echo })))
     return
   }
   if (action === 'send_private_msg') {
@@ -119,6 +159,46 @@ const server = http.createServer((req, res) => {
       return
     }
     broadcast(event(from, text))
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, clients: clients.size }))
+    return
+  }
+  if (url.pathname === '/image') {
+    const from = Number(url.searchParams.get('from') || 0)
+    const text = url.searchParams.get('text') || ''
+    const file = url.searchParams.get('file') || ''
+    if (from === 0 || file === '') {
+      res.writeHead(400, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'from 和 file 都要有' }))
+      return
+    }
+    broadcast(event(from, text, file))
+    res.writeHead(200, { 'content-type': 'application/json' })
+    res.end(JSON.stringify({ ok: true, clients: clients.size }))
+    return
+  }
+  if (url.pathname === '/forward') {
+    const from = Number(url.searchParams.get('from') || 0)
+    const id = url.searchParams.get('id') || 'fake-forward-1'
+    if (from === 0) {
+      res.writeHead(400, { 'content-type': 'application/json' })
+      res.end(JSON.stringify({ ok: false, error: 'from 要有' }))
+      return
+    }
+    nextMessageId += 1
+    broadcast({
+      post_type: 'message',
+      message_type: 'private',
+      sub_type: 'friend',
+      self_id: SELF_ID,
+      user_id: from,
+      message: [{ type: 'forward', data: { id } }],
+      raw_message: '[聊天记录]',
+      font: 0,
+      sender: { user_id: from, nickname: '测试主人' },
+      message_id: nextMessageId,
+      time: Math.floor(Date.now() / 1000),
+    })
     res.writeHead(200, { 'content-type': 'application/json' })
     res.end(JSON.stringify({ ok: true, clients: clients.size }))
     return

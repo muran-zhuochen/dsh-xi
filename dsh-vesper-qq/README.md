@@ -13,9 +13,10 @@ QQ → OneBot（OpenQQ / 别的实现）→ ws://127.0.0.1:3001/ → 本插件 �
 | 方向 | 行为 |
 |---|---|
 | 收 | 只要 `message_type: private` 且 `user_id` 等于配的主人号。别人的消息、群消息、心跳，一律只记日志 |
-| 投 | 压成一行 `[QQ 私信] 昵称：内容`，走 `sessionController.prompt`（`mode: queue`，不打断正在说的话）投进对话 |
-| 回 | 她调用 `qq_send`，一行一条，最多六条，条间隔 800ms |
-| 查 | `qq_status` 看连没连上、登的是哪个号、最近收到什么 |
+| 图 | 收到图片直接贴进对话（`Life\QQ\媒体\` 留档）；转发的聊天记录摊成文字（`[转发聊天记录]`，最多 3 万字，全文存 `Life\QQ\转发\`） |
+| 投 | 压成一行 `[QQ 私信] 昵称：内容`，走 `sessionController.prompt`（`mode: steer`，不打断正在说的话）投进对话 |
+| 回 | 她调用 `qq_send`，一行一条，最多六条，条间隔 800ms；发表情包用 `qq_send_image(file=绝对路径)`，`[表情: 描述]` 在 QQ 里不渲染 |
+| 查 | `qq_status` 看连没连上、登的是哪个号、最近收到什么；`qq_media` 看图存哪、把图收成表情包 |
 
 去重按 `message_id`；同一条只投一次，重启也不重投（内存里留最近 200 条）。
 
@@ -34,6 +35,8 @@ QQ → OneBot（OpenQQ / 别的实现）→ ws://127.0.0.1:3001/ → 本插件 �
         replyMaxLines: 6
         gapMs: 800
         maxInboundChars: 2000
+        forwardMaxChars: 30000
+        forwardDir: ''        # 转发全文的存档目录
         logFile: ''          # 默认 ~/.dsh/xi-qq.log
 ```
 
