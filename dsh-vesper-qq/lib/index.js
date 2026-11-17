@@ -143,6 +143,38 @@ export function apply(ctx, rawConfig) {
     }
   }
 
+  // 投递之后回头看一眼：万一那一轮没跑起来（进过队列没被叫醒），再踢一次。
+  async function verifyDelivery(sessionId, requestId, content) {
+    const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms) })
+    for (const delay of [5000, 15000]) {
+      await wait(delay)
+      let snapshot
+      try {
+        snapshot = await ctx.sessionController.state({ sessionId }, new AbortController().signal)
+      } catch (err) {
+        trace(`核对状态失败 ${err?.message || err}`)
+        return
+      }
+      if (snapshot?.running) return
+      const queued = Array.isArray(snapshot?.queue) ? snapshot.queue : []
+      if (queued.some((item) => String(item?.rpcId ?? '') === requestId)) continue
+      trace(`投递没跑起来，重投一次：${requestId}`)
+      try {
+        await ctx.sessionController.prompt({
+          requestId: `${requestId}-retry`,
+          sessionId,
+          mode: 'steer',
+          content,
+          clientTimeZone: 'Asia/Shanghai',
+        }, new AbortController().signal)
+        trace('重投成功')
+      } catch (err) {
+        trace(`重投失败 ${err?.message || err}`)
+      }
+      return
+    }
+  }
+
   async function deliver(body, event) {
     const sessionId = await pickSessionId()
     if (sessionId === '') {
@@ -152,16 +184,19 @@ export function apply(ctx, rawConfig) {
     const nickname = String(event?.sender?.nickname || '阿晚')
     const line = body.length > config.maxInboundChars ? `${body.slice(0, config.maxInboundChars)}…` : body
     const controller = new AbortController()
+    const requestId = `qq-${event?.message_id ?? Date.now()}`
+    const content = textBlock(`[QQ 私信] ${nickname}：\n${line}`)
     try {
       await ctx.sessionController.prompt({
-        requestId: `qq-${event?.message_id ?? Date.now()}`,
+        requestId,
         sessionId,
         mode: 'queue',
-        content: textBlock(`[QQ 私信] ${nickname}：\n${line}`),
+        content,
         clientTimeZone: 'Asia/Shanghai',
       }, controller.signal)
       state.delivered += 1
       trace(`已投递到 ${sessionId}`)
+      void verifyDelivery(sessionId, requestId, content)
       return true
     } catch (err) {
       state.lastError = String(err?.message || err)
