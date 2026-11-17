@@ -190,7 +190,7 @@ export function apply(ctx, rawConfig) {
       await ctx.sessionController.prompt({
         requestId,
         sessionId,
-        mode: 'queue',
+        mode: 'steer',
         content,
         clientTimeZone: 'Asia/Shanghai',
       }, controller.signal)
