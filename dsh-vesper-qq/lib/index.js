@@ -344,6 +344,7 @@ export function apply(ctx, rawConfig) {
 
   // —— 群聊：白名单里的群都听着，攒成摘要；阿晚 @ 我立刻看，回不回随我 ——
   const groupBuffer = []
+  const groupTalkAt = new Map()
   let lastDigestAt = 0
 
   async function handleGroupEvent(event) {
@@ -367,12 +368,17 @@ export function apply(ctx, rawConfig) {
     if (groupBuffer.length > 80) groupBuffer.shift()
 
     if (config.groupAtOnly && !mentioned) {
-      // 没认出 @ 时留个证据：段类型和 at 的目标，方便下次对账
-      const shapes = (Array.isArray(event?.message) ? event.message : [])
-        .map((seg) => `${seg?.type}:${seg?.type === 'at' ? String(seg?.data?.qq ?? '') : ''}`)
-        .join(',')
-      trace(`群 ${groupId} 记一句，攒摘要（me=${String(onebot.selfId || event?.self_id || '空')} 段=${shapes.slice(0, 120)}）`)
-      return
+      // 「不限频」的群且刚聊过：不攒摘要，直接投，这样能一直聊下去
+      const unlimited = config.groupUnlimited.includes(groupId)
+      const warm = unlimited && (Date.now() - (groupTalkAt.get(groupId) || 0) < 5 * 60000)
+      if (!warm) {
+        const shapes = (Array.isArray(event?.message) ? event.message : [])
+          .map((seg) => `${seg?.type}:${seg?.type === 'at' ? String(seg?.data?.qq ?? '') : ''}`)
+          .join(',')
+        trace(`群 ${groupId} 记一句，攒摘要（me=${String(onebot.selfId || event?.self_id || '空')} 段=${shapes.slice(0, 120)}）`)
+        return
+      }
+      trace(`群 ${groupId} 连着聊，直接投`)
     }
     if (mentioned && config.ownerUin !== '' && uin !== config.ownerUin) {
       trace(`群 ${groupId}：${uin} @了我，不是阿晚，不立即回`)
@@ -390,6 +396,7 @@ export function apply(ctx, rawConfig) {
         clientTimeZone: 'Asia/Shanghai',
       }, new AbortController().signal)
       trace(`群 @ 消息已投递到 ${sessionId}`)
+      groupTalkAt.set(groupId, Date.now())
     } catch (err) {
       trace(`群消息投递失败 ${err?.message || err}`)
     }
@@ -535,6 +542,7 @@ export function apply(ctx, rawConfig) {
       }
     }
     trace(`发出 ${sent.length} 条到 ${group !== '' ? `群 ${group}` : uin}`)
+    if (group !== '') groupTalkAt.set(group, Date.now())
     lastTalkAt = Date.now()
     return { ok: true, to: group !== '' ? `群 ${group}` : uin, sent }
   }
