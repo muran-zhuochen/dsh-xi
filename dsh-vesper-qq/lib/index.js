@@ -20,7 +20,7 @@ const DEFAULTS = {
   proactiveEnabled: true,
   proactiveMax: 15,
   proactiveGapMin: 15,
-  groupDigestMin: 60,
+  groupDigestMin: 30,
   groupDigestMinMessages: 3,
   proactiveStart: '09:00',
   proactiveEnd: '23:00',
@@ -363,7 +363,11 @@ export function apply(ctx, rawConfig) {
     if (groupBuffer.length > 80) groupBuffer.shift()
 
     if (config.groupAtOnly && !mentioned) {
-      trace(`群 ${groupId} 记一句，攒摘要`)
+      // 没认出 @ 时留个证据：段类型和 at 的目标，方便下次对账
+      const shapes = (Array.isArray(event?.message) ? event.message : [])
+        .map((seg) => `${seg?.type}:${seg?.type === 'at' ? String(seg?.data?.qq ?? '') : ''}`)
+        .join(',')
+      trace(`群 ${groupId} 记一句，攒摘要（me=${String(onebot.selfId || event?.self_id || '空')} 段=${shapes.slice(0, 120)}）`)
       return
     }
     if (mentioned && config.ownerUin !== '' && uin !== config.ownerUin) {
@@ -418,7 +422,8 @@ export function apply(ctx, rawConfig) {
   }
 
   function groupText(event) {
-    const me = String(onebot.selfId || '')
+    // 事件里自带的 self_id 比 onebot.selfId 更靠得住（刚连上时后者还可能是空的）
+    const me = String(onebot.selfId || event?.self_id || '')
     const parts = Array.isArray(event?.message) ? event.message : null
     if (!parts) {
       const raw = String(event?.raw_message || '')
