@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Vesper QQ",
+    "description": "Vesper 的 QQ：把阿晚的 QQ 私信投进对话，用 qq_send 一条一条回。只连本机 OneBot v11 的正向 WebSocket，只认主人一个号；不装不碰任何 QQ 客户端，运行状态写进 xi-qq.log。"
+  }
+}

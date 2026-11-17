@@ -1,4 +1,4 @@
-# 汐的 QQ
+# Vesper QQ
 
 把阿晚的 QQ 私信投进对话，用 `qq_send` 一条一条回。宿主半侧是普通 Cordis 插件，**只连本机 OneBot v11 的正向 WebSocket**，不装、不碰任何 QQ 客户端。
 

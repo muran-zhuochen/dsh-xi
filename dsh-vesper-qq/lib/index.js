@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { OneBot } from './onebot.js'
 
-export const name = 'dsh-xi-qq'
+export const name = 'dsh-vesper-qq'
 export const inject = ['tools', 'systemPrompt', 'sessionController']
 
 const DSH_HOME = process.env.DSH_HOME || path.join(os.homedir(), '.dsh')
@@ -345,12 +345,12 @@ export function apply(ctx, rawConfig) {
   ctx.effect(() => {
     const disposers = [sendTool, statusTool].map((tool) => ctx.tools.register(tool))
     return () => { for (const dispose of disposers) { try { dispose?.() } catch { /* 已卸载 */ } } }
-  }, 'dsh-xi-qq: 工具')
+  }, 'dsh-vesper-qq: 工具')
 
   ctx.effect(() => {
     onebot.start()
     return () => onebot.stop()
-  }, 'dsh-xi-qq: onebot')
+  }, 'dsh-vesper-qq: onebot')
 
   ctx.effect(() => ctx.systemPrompt.section({
     name: 'xi-qq',
@@ -364,7 +364,7 @@ export function apply(ctx, rawConfig) {
         '别人的 QQ 消息进不来，只有阿晚这一个号。',
       ].join('\n')
     },
-  }), 'dsh-xi-qq: 提示')
+  }), 'dsh-vesper-qq: 提示')
 
   trace(`apply 进入：${config.onebotUrl} owner=${config.ownerUin || '(未配)'} dryRun=${config.dryRun}`)
 }

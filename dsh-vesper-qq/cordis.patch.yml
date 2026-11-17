@@ -1,8 +1,8 @@
 # Bundle patch: 宿主半侧是普通 Cordis 插件。只连本机 OneBot，不碰 QQ 客户端本身。
 # 默认 dryRun: true —— 没填主人 QQ 号之前，收到什么都只记日志，不往对话里扔。
 - insert:
-    - id: dsh-xi-qq
-      name: dsh-xi-qq
+    - id: dsh-vesper-qq
+      name: dsh-vesper-qq
       config:
         onebotUrl: ws://127.0.0.1:3001/
         ownerUin: ''

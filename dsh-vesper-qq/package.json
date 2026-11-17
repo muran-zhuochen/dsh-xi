@@ -1,8 +1,8 @@
 {
-  "name": "dsh-xi-qq",
+  "name": "dsh-vesper-qq",
   "version": "0.1.0",
   "private": true,
-  "description": "汐 · QQ：把阿晚的 QQ 私信投进对话，用 qq_send 回话。桥接本机 OneBot v11 正向 WebSocket，只认主人一个号。",
+  "description": "Vesper QQ：把阿晚的 QQ 私信投进对话，用 qq_send 回话。桥接本机 OneBot v11 正向 WebSocket，只认主人一个号。",
   "license": "MIT",
   "type": "module",
   "main": "lib/index.js",
