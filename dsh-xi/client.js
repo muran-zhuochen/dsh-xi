@@ -367,7 +367,7 @@ window.__ModuleLoader__.load({
       const qq = acc && acc.openqq
       const live = Boolean(qq && qq.webui)
       const dot = (ok) => h('span', { style: { color: ok ? '#3fb950' : '#d29922', fontWeight: 700 } }, ok ? '● 在线' : '○ 离线')
-      const src = qq && qq.token ? acc.prefix + '#token=' + qq.token : (acc ? acc.prefix : '')
+      const src = qq && qq.tokenValue ? acc.prefix + '#token=' + qq.tokenValue : (acc ? acc.prefix : '')
 
       return h('div', null,
         h('div', { className: 'xi-card' },

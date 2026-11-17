@@ -73,6 +73,13 @@ export async function proxy(request, upstreamPath) {
   }
 
   const type = res.headers.get('content-type') || ''
+
+  // 流式接口（SSE）不能整包缓冲，直接把它接过来往下吐
+  if (upstreamPath === '/api/stream') {
+    traceProxy(`${upstreamPath} ${res.status} stream`)
+    return new Response(res.body, { status: res.status, headers: { 'content-type': type || 'text/event-stream', 'cache-control': 'no-store' } })
+  }
+
   const raw = Buffer.from(await res.arrayBuffer())
   traceProxy(`${upstreamPath} ${res.status} ${type.split(';')[0]} ${raw.length}B`)
   const out = { 'content-type': type || 'application/octet-stream', 'cache-control': 'no-store' }
@@ -99,6 +106,7 @@ export async function probe() {
     webui,
     onebot,
     token: Boolean(state?.token),
+    tokenValue: state?.token || '',
     phase: state?.phase || '',
     pid: state?.pid || 0,
     at: state?.at || '',
