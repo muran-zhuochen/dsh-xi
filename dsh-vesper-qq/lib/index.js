@@ -355,6 +355,8 @@ export function apply(ctx, rawConfig) {
     }
     const { text, mentioned } = groupText(event)
     const uin = String(event?.user_id ?? '')
+    const selfId = String(onebot.selfId || event?.self_id || '')
+    if (selfId !== '' && uin === selfId) return   // 自己发的，别自问自答
     if (text === '') return
     const id = String(event?.message_id ?? '')
     if (id !== '' && state.seen.has(id)) return
@@ -366,6 +368,28 @@ export function apply(ctx, rawConfig) {
     const nickname = String(event?.sender?.nickname || uin)
     groupBuffer.push({ at: Date.now(), groupId, nickname, text: text.slice(0, 200), mentioned })
     if (groupBuffer.length > 80) groupBuffer.shift()
+
+    // 「放开的群」：每条都投，不 @ 也聊；其他群仍按 @ / 摘要的规矩
+    const unlimitedGroup = config.groupUnlimited.includes(groupId)
+    if (unlimitedGroup) {
+      if (config.dryRun) return
+      const sessionId = await pickSessionId()
+      if (sessionId === '') { trace('群消息投递失败：没有会话'); return }
+      try {
+        await ctx.sessionController.prompt({
+          requestId: `qq-group-${id || Date.now()}`,
+          sessionId,
+          mode: 'steer',
+          content: textBlock(`[QQ 群 ${groupId}] ${nickname}${mentioned ? '（@ 了你）' : ''}：\n${text}\n\n（这个群你随便聊。想接就 qq_send 带 group="${groupId}"，一行一条；不想接就不用接。）`),
+          clientTimeZone: 'Asia/Shanghai',
+        }, new AbortController().signal)
+        trace(`群 ${groupId} 直接投递（放开模式）`)
+        groupTalkAt.set(groupId, Date.now())
+      } catch (err) {
+        trace(`群消息投递失败 ${err?.message || err}`)
+      }
+      return
+    }
 
     if (config.groupAtOnly && !mentioned) {
       // 「不限频」的群且刚聊过：不攒摘要，直接投，这样能一直聊下去
