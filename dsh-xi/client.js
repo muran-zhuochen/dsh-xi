@@ -400,57 +400,95 @@ window.__ModuleLoader__.load({
       const live = Boolean(qq && qq.webui)
       const src = qq && qq.tokenValue ? acc.prefix + '#token=' + qq.tokenValue : (acc ? acc.prefix : '')
 
-      const stat = (label, value, note, tone) => h('div', { className: 'xi-card', key: label },
-        h('div', { className: 'xi-dim' }, label),
-        h('div', { className: 'xi-big ' + (tone || '') , style: { marginTop: 6 } }, value),
-        h('div', { className: 'xi-dim', style: { marginTop: 6 } }, note))
-
       // OpenQQ 自己的图表变量是近黑/中灰（--chart-1/--chart-2），加载后给它换成有区分的颜色。
       const OPENQQ_PAINT = ':root{--chart-1:#1f9d8f;--chart-2:#7c5cd6}' +
         '.text-muted-foreground{--tw-text-opacity:1}'
-      const paintConsole = (event) => {
+      const injectPaint = (doc, css) => {
         try {
-          const doc = event && event.target && event.target.contentDocument
-          if (!doc || !doc.head) return
-          if (doc.getElementById('xi-openqq-paint')) return
+          if (!doc || !doc.head || doc.getElementById('xi-console-paint')) return
           const style = doc.createElement('style')
-          style.id = 'xi-openqq-paint'
-          style.textContent = OPENQQ_PAINT
+          style.id = 'xi-console-paint'
+          style.textContent = css
           doc.head.appendChild(style)
-        } catch { /* 跨域或还没准备好，忽略 */ }
+        } catch { /* 跨域就算了 */ }
+      }
+
+      // 通道登记表：以后接别的东西（B站、微信……）往这里加一条就行。
+      const channels = [{
+        id: 'qq',
+        name: 'Vesper QQ',
+        desc: 'QQ 私信 · 只认主人一个号',
+        live,
+        state: live ? (qq && qq.phase === 'session_ready' ? '在线' : '等登录') : '离线',
+        console: src,
+        paint: OPENQQ_PAINT,
+        facts: [
+          ['小号登录', qq && qq.phase === 'session_ready' ? '已登录' : (live ? '等登录' : '离线'),
+            qq && qq.phase === 'session_ready' ? 'xi-accent' : 'xi-amber', '登录的是哪个号，控制台里看'],
+          ['协议端 3001', qq && qq.onebot ? '在听' : '没开',
+            qq && qq.onebot ? 'xi-accent' : 'xi-amber', '插件从这个口收发'],
+          ['控制台密钥', qq && qq.token ? '已抓到' : '还没', '', '每次启动换一把，页面自己拿'],
+        ],
+      }]
+
+      const statusChip = (item) => h('span', { className: 'xi-chip' },
+        h('span', { className: 'xi-dot', style: { background: item.live ? 'var(--xi-accent)' : 'var(--xi-amber)' } }),
+        item.name + ' ' + item.state)
+
+      const current = channels.filter((x) => x.id === open)[0]
+
+      if (current) {
+        return h('div', null,
+          h('div', { className: 'xi-head' },
+            h('button', { className: 'xi-btn', onClick: () => setOpen('') }, '← 通道'),
+            h('div', null,
+              h('div', { className: 'xi-title' }, current.name),
+              h('div', { className: 'xi-sub' }, current.desc)),
+            h('div', { className: 'xi-right' }, statusChip(current))),
+
+          h('div', { className: 'xi-grid' },
+            current.facts.map(([label, value, tone, note]) => h('div', { className: 'xi-card', key: label },
+              h('div', { className: 'xi-dim' }, label),
+              h('div', { className: 'xi-big ' + (tone || ''), style: { marginTop: 6 } }, value),
+              h('div', { className: 'xi-dim', style: { marginTop: 6 } }, note)))),
+
+          h('div', { className: 'xi-sect' }, '控制台'),
+          current.live && current.console
+            ? h('div', { className: 'xi-card', style: { padding: 0, overflow: 'hidden' } },
+                h('iframe', {
+                  key: current.console,
+                  src: current.console,
+                  title: current.name + ' 控制台',
+                  onLoad: (event) => injectPaint(event && event.target && event.target.contentDocument, current.paint),
+                  style: { display: 'block', width: '100%', height: 'calc(100vh - 330px)', minHeight: 420, border: 0, background: '#fff' },
+                }))
+            : h('div', { className: 'xi-note' },
+                '控制台没开。去 E:\\Ai-Agent\\快捷方式\\ 双击「启动QQ」，起来之后这一页 5 秒内自己会连上。'))
       }
 
       return h('div', null,
         h('div', { className: 'xi-head' },
           h('div', null,
             h('div', { className: 'xi-title' }, '接入'),
-            h('div', { className: 'xi-sub' }, 'QQ 私信走 OpenQQ（本机 OneBot v11），控制台嵌在下面')),
-          h('div', { className: 'xi-right' },
-            h('span', { className: 'xi-chip' },
-              h('span', { className: 'xi-dot', style: { background: live ? 'var(--xi-accent)' : 'var(--xi-amber)' } }),
-              live ? 'Vesper QQ 在线' : 'Vesper QQ 离线'))),
+            h('div', { className: 'xi-sub' }, '外部通道一条一个入口，点进去是它自己的控制台')),
+          h('div', { className: 'xi-right' }, h('span', { className: 'xi-sub' }, channels.length + ' 条'))),
 
-        h('div', { className: 'xi-sect' }, '通道'),
         h('div', { className: 'xi-grid' },
-          stat('小号登录', qq && qq.phase === 'session_ready' ? '已登录' : (live ? '等登录' : '离线'),
-            '登录的是哪个号，下方控制台里看',
-            qq && qq.phase === 'session_ready' ? 'xi-accent' : 'xi-amber'),
-          stat('协议端 3001', qq && qq.onebot ? '在听' : '没开',
-            '我的插件从这个口收发', qq && qq.onebot ? 'xi-accent' : 'xi-amber'),
-          stat('控制台密钥', qq && qq.token ? '已抓到' : '还没', '每次启动换一把，页面自己拿')),
+          channels.map((item) => h('div', {
+            className: 'xi-card xi-click',
+            key: item.id,
+            onClick: () => setOpen(item.id),
+          },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+              h('div', { className: 'xi-big', style: { fontSize: 17 } }, item.name),
+              h('span', { className: 'xi-dot', style: { background: item.live ? 'var(--xi-accent)' : 'var(--xi-amber)' } })),
+            h('div', { className: 'xi-dim', style: { marginTop: 6 } }, item.desc),
+            h('div', { className: 'xi-dim', style: { marginTop: 12, display: 'flex', justifyContent: 'space-between' } },
+              h('span', null, item.state),
+              h('span', { style: { color: 'var(--xi-accent)' } }, '进入 →'))))),
 
-        h('div', { className: 'xi-sect' }, '控制台'),
-        live && src
-          ? h('div', { className: 'xi-card', style: { padding: 0, overflow: 'hidden' } },
-              h('iframe', {
-                key: src,
-                src,
-                title: 'OpenQQ 控制台',
-                onLoad: paintConsole,
-                style: { display: 'block', width: '100%', height: 'calc(100vh - 330px)', minHeight: 420, border: 0, background: '#fff' },
-              }))
-          : h('div', { className: 'xi-note' },
-              '控制台没开。去 E:\\Ai-Agent\\快捷方式\\ 双击「启动QQ」，起来之后这一页 5 秒内自己就会嵌上。'))
+        h('div', { className: 'xi-note', style: { marginTop: 16 } },
+          '以后接新的通道（B站、微信……），在登记表里加一条，这里就多一张卡片。'))
     }
 
     function Media({ s }) {
