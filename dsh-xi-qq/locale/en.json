@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Xi's QQ",
+    "description": "Pushes Ah Wan's QQ direct messages into the conversation and replies with qq_send, one line per message. Connects only to a local OneBot v11 forward WebSocket and accepts the owner's account alone; no QQ client is installed or touched. Runtime notes go to xi-qq.log."
+  }
+}
