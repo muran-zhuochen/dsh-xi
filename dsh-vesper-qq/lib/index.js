@@ -17,6 +17,7 @@ const DEFAULTS = {
   othersSessionId: '',
   groups: [],
   groupAtOnly: true,
+  groupUnlimited: [],
   proactiveEnabled: true,
   proactiveMax: 15,
   proactiveGapMin: 15,
@@ -59,6 +60,9 @@ function resolveConfig(raw) {
   config.othersMode = String(config.othersMode || 'off').toLowerCase() === 'chat' ? 'chat' : 'off'
   config.othersSessionId = String(config.othersSessionId || '')
   config.groups = Array.isArray(config.groups) ? config.groups.map((g) => String(g).trim()).filter((g) => g !== '') : []
+  config.groupUnlimited = Array.isArray(config.groupUnlimited)
+    ? config.groupUnlimited.map((g) => String(g).trim()).filter((g) => g !== '')
+    : []
   config.groupAtOnly = config.groupAtOnly !== false
   config.proactiveEnabled = config.proactiveEnabled !== false
   config.proactiveMax = Math.max(0, Math.min(24, Number(config.proactiveMax) || 7))
@@ -394,10 +398,15 @@ export function apply(ctx, rawConfig) {
   // 攒够了几条，就把刚才群里在聊什么端给我，接不接我自己决定
   async function groupDigestTick() {
     if (!config.proactiveEnabled || config.dryRun) return
-    if (groupBuffer.length < config.groupDigestMinMessages) return
-    // 群里热闹就端得勤（15 分钟且攒够 10 条），安静就按常态间隔
+    if (groupBuffer.length === 0) return
+    const latestGroup = groupBuffer[groupBuffer.length - 1].groupId
+    const unlimited = config.groupUnlimited.includes(latestGroup)
+    if (groupBuffer.length < (unlimited ? 1 : config.groupDigestMinMessages)) return
+    // 群里热闹就端得勤（15 分钟且攒够 10 条），安静就按常态间隔；
+    // 「不限频」的群每轮 tick 都给一次，不再等间隔。
     const busy = groupBuffer.length >= 10 && Date.now() - lastDigestAt >= 15 * 60000
-    if (!busy && Date.now() - lastDigestAt < config.groupDigestMin * 60000) return
+    const free = unlimited && Date.now() - lastDigestAt >= 8 * 60000
+    if (!busy && !free && Date.now() - lastDigestAt < config.groupDigestMin * 60000) return
     if (!onebot.isOpen()) return
     const sessionId = await ensureProactiveSession()
     if (sessionId === '') return
