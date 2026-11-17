@@ -148,19 +148,27 @@ export function apply(ctx, rawConfig) {
   }
 
   // 投递之后回头看一眼：万一那一轮没跑起来（进过队列没被叫醒），再踢一次。
+  // 判据用「会话游标有没有前进」——只有一丁点动静都没发生，才算被吞；
+  // 这样不会在已经跑起来的时候重复投一遍。
   async function verifyDelivery(sessionId, requestId, content) {
     const wait = (ms) => new Promise((resolve) => { setTimeout(resolve, ms) })
-    for (const delay of [5000, 15000]) {
-      await wait(delay)
-      let snapshot
+    const snapshotOf = async () => {
       try {
-        snapshot = await ctx.sessionController.state({ sessionId }, new AbortController().signal)
+        return await ctx.sessionController.state({ sessionId }, new AbortController().signal)
       } catch (err) {
         trace(`核对状态失败 ${err?.message || err}`)
-        return
+        return null
       }
-      if (snapshot?.running) return
-      const queued = Array.isArray(snapshot?.queue) ? snapshot.queue : []
+    }
+    const base = await snapshotOf()
+    if (base === null) return
+    for (const delay of [5000, 12000]) {
+      await wait(delay)
+      const snapshot = await snapshotOf()
+      if (snapshot === null) return
+      if (snapshot.running) return
+      if (Number(snapshot.cursor) > Number(base.cursor)) return
+      const queued = Array.isArray(snapshot.queue) ? snapshot.queue : []
       if (queued.some((item) => String(item?.rpcId ?? '') === requestId)) continue
       trace(`投递没跑起来，重投一次：${requestId}`)
       try {
