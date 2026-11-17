@@ -405,6 +405,21 @@ window.__ModuleLoader__.load({
         h('div', { className: 'xi-big ' + (tone || '') , style: { marginTop: 6 } }, value),
         h('div', { className: 'xi-dim', style: { marginTop: 6 } }, note))
 
+      // OpenQQ 自己的图表变量是近黑/中灰（--chart-1/--chart-2），加载后给它换成有区分的颜色。
+      const OPENQQ_PAINT = ':root{--chart-1:#1f9d8f;--chart-2:#7c5cd6}' +
+        '.text-muted-foreground{--tw-text-opacity:1}'
+      const paintConsole = (event) => {
+        try {
+          const doc = event && event.target && event.target.contentDocument
+          if (!doc || !doc.head) return
+          if (doc.getElementById('xi-openqq-paint')) return
+          const style = doc.createElement('style')
+          style.id = 'xi-openqq-paint'
+          style.textContent = OPENQQ_PAINT
+          doc.head.appendChild(style)
+        } catch { /* 跨域或还没准备好，忽略 */ }
+      }
+
       return h('div', null,
         h('div', { className: 'xi-head' },
           h('div', null,
@@ -431,6 +446,7 @@ window.__ModuleLoader__.load({
                 key: src,
                 src,
                 title: 'OpenQQ 控制台',
+                onLoad: paintConsole,
                 style: { display: 'block', width: '100%', height: 'calc(100vh - 330px)', minHeight: 420, border: 0, background: '#fff' },
               }))
           : h('div', { className: 'xi-note' },
