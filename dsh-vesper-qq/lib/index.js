@@ -312,7 +312,12 @@ export function apply(ctx, rawConfig) {
     if (minutes < start || minutes > end) return
     if (day !== proactive.day) { proactive.day = day; proactive.count = 0; saveProactive() }
     if (proactive.count >= config.proactiveMax) return
-    if (Date.now() - lastTalkAt < config.proactiveGapMin * 60000) return
+    // 活跃的时候门槛低一点（刚聊过 5 分钟没声就可能补一句），
+    // 安静下来之后按常态门槛走。总量仍受日上限约束。
+    const silentMin = (Date.now() - lastTalkAt) / 60000
+    const warm = silentMin < 20
+    const gapMin = warm ? 5 : config.proactiveGapMin
+    if (silentMin < gapMin) return
     if (Date.now() - proactive.lastFire < 60 * 60000) return
     const sessionId = await ensureProactiveSession()
     if (sessionId === '') return
@@ -386,7 +391,9 @@ export function apply(ctx, rawConfig) {
   async function groupDigestTick() {
     if (!config.proactiveEnabled || config.dryRun) return
     if (groupBuffer.length < config.groupDigestMinMessages) return
-    if (Date.now() - lastDigestAt < config.groupDigestMin * 60000) return
+    // 群里热闹就端得勤（15 分钟且攒够 10 条），安静就按常态间隔
+    const busy = groupBuffer.length >= 10 && Date.now() - lastDigestAt >= 15 * 60000
+    if (!busy && Date.now() - lastDigestAt < config.groupDigestMin * 60000) return
     if (!onebot.isOpen()) return
     const sessionId = await ensureProactiveSession()
     if (sessionId === '') return
