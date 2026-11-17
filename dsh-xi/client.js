@@ -381,8 +381,14 @@ window.__ModuleLoader__.load({
       if (!ok) throw new Error('clipboard unavailable')
     }
 
+    // 选中的通道放在组件外面：页面整体重绘时 useState 会被冲掉。
+    let OPEN_CHANNEL = ''
+
     function Channels({ s }) {
       const [acc, setAcc] = use.useState(null)
+      const [, setTick] = use.useState(0)
+      const open = OPEN_CHANNEL
+      const setOpen = (id) => { OPEN_CHANNEL = id; setTick((n) => n + 1) }
       use.useEffect(() => {
         let alive = true
         const load = () => {
@@ -483,9 +489,9 @@ window.__ModuleLoader__.load({
               h('div', { className: 'xi-big', style: { fontSize: 17 } }, item.name),
               h('span', { className: 'xi-dot', style: { background: item.live ? 'var(--xi-accent)' : 'var(--xi-amber)' } })),
             h('div', { className: 'xi-dim', style: { marginTop: 6 } }, item.desc),
-            h('div', { className: 'xi-dim', style: { marginTop: 12, display: 'flex', justifyContent: 'space-between' } },
+            h('div', { className: 'xi-dim', style: { marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' } },
               h('span', null, item.state),
-              h('span', { style: { color: 'var(--xi-accent)' } }, '进入 →'))))),
+              h('button', { className: 'xi-btn', onClick: (e) => { if (e && e.stopPropagation) e.stopPropagation(); setOpen(item.id) } }, '进入 →'))))),
 
         h('div', { className: 'xi-note', style: { marginTop: 16 } },
           '以后接新的通道（B站、微信……），在登记表里加一条，这里就多一张卡片。'))
