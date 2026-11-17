@@ -118,6 +118,29 @@ window.__ModuleLoader__.load({
   font:inherit;font-size:11.5px;font-variant-numeric:tabular-nums}
 .xi-wl-rejbtn:hover{color:var(--xi-accent);border-color:color-mix(in srgb,var(--xi-accent) 55%,transparent)}
 .xi-wl-sep{margin:14px 0;border-top:1px solid var(--xi-line)}
+
+/* —— 视觉统一：留白、层次、交互反馈（只调观感，不动结构） —— */
+.xi-root{font-size:14px;line-height:1.66;padding:26px 30px 56px}
+.xi-title{font-size:21px;letter-spacing:.2px}
+.xi-sub{margin-top:3px;line-height:1.5}
+.xi-head{margin-bottom:20px;align-items:flex-end}
+.xi-sect{position:relative;margin:26px 0 10px;padding-left:11px;letter-spacing:1.6px;text-transform:uppercase}
+.xi-sect::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);
+  width:3px;height:11px;border-radius:2px;background:color-mix(in srgb,var(--xi-accent) 70%,transparent)}
+.xi-card{border-radius:14px;padding:16px 18px;
+  background:linear-gradient(180deg,color-mix(in srgb,currentColor 5%,transparent),color-mix(in srgb,currentColor 2.5%,transparent));
+  box-shadow:0 1px 0 color-mix(in srgb,currentColor 6%,transparent)}
+.xi-card .xi-big{line-height:1.25;font-variant-numeric:tabular-nums}
+.xi-grid{gap:14px}
+.xi-chip{padding:3px 10px 3px 8px;background:color-mix(in srgb,currentColor 5%,transparent)}
+.xi-btn{border-radius:10px;transition:border-color .15s ease,color .15s ease,background .15s ease}
+.xi-btn:hover{border-color:color-mix(in srgb,var(--xi-accent) 45%,transparent);
+  color:var(--xi-accent);background:color-mix(in srgb,var(--xi-accent) 8%,transparent)}
+.xi-tabs{gap:4px;margin-bottom:20px}
+.xi-tab{border-radius:8px 8px 0 0;transition:color .15s ease,background .15s ease}
+.xi-tab:hover{color:var(--xi-muted);background:color-mix(in srgb,currentColor 4%,transparent)}
+.xi-num,.xi-wl-input,input,textarea,select{border-radius:9px}
+.xi-pre{line-height:1.85}
 `
 
     function ensureStyle() {
